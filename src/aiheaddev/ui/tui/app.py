@@ -27,6 +27,7 @@ from herdr_master.pipeline.launcher import (
     resolve_launch_context,
 )
 from herdr_master.pipeline.squad import resolve_squad
+from aiheaddev.core.logging import get_logger
 from aiheaddev.ui.tui.live_pane import (
     LivePaneController,
     LiveTargetError,
@@ -36,7 +37,6 @@ from aiheaddev.ui.tui.live_pane import (
     resolve_live_pane,
 )
 from aiheaddev.ui.tui.messages import TargetSelected
-from aiheaddev.ui.tui.modals.config_drawer import ConfigDrawer
 from aiheaddev.ui.tui.modals.launch_council import (
     CouncilLaunchParams,
     LaunchCouncilModal,
@@ -52,7 +52,9 @@ from aiheaddev.ui.tui.modals.project_folder import (
     validate_project_folder,
 )
 from aiheaddev.ui.tui.modals.confirm import ConfirmModal
+from aiheaddev.ui.tui.modals.log_viewer import LogViewerModal
 from aiheaddev.ui.tui.modals.settings import SettingsModal
+from aiheaddev.ui.tui.screens.ai_head_screen import AiHeadScreen
 from aiheaddev.ui.tui.state import AppState
 from aiheaddev.ui.tui.widgets.deck import CenterDeck
 from aiheaddev.ui.tui.widgets.footer import ActionFooter
@@ -65,6 +67,8 @@ from aiheaddev.ui.tui.widgets.workspaces import (
     safe_display,
     workspace_agents,
 )
+
+logger = get_logger("cockpit")
 
 
 def _result_pane(result: dict) -> Optional[str]:
@@ -86,6 +90,7 @@ class HerdrMasterApp(App):
         Binding("e", "new_ergo", "New Ergo"),
         Binding("s", "open_settings", "Settings"),
         Binding("c", "open_settings", "Settings"),
+        Binding("l", "view_logs", "Logs"),
         Binding("o", "open_in_herdr", "Open in Herdr", priority=False),
         Binding("d", "delete_workspace", "Delete Workspace", priority=False),
         Binding("q", "quit", "Quit"),
@@ -201,6 +206,8 @@ class HerdrMasterApp(App):
             return
         self._last_live_frame = frame
         self._deck.update_live_frame(frame)
+        if isinstance(self.screen, AiHeadScreen):
+            self.screen.update_live_frame(frame)
 
     def _cancel_live_submit(self) -> None:
         task = self._live_submit_task
@@ -331,6 +338,7 @@ class HerdrMasterApp(App):
 
         async def _run_ensure() -> None:
             try:
+                logger.info(f"Ensuring AiHead tab in workspace (force={force})...")
                 target_ws = getattr(self.app_state, "workspace_id", None)
                 if (not target_ws or target_ws == "ws-01") and self.client is not None:
                     try:
@@ -360,6 +368,7 @@ class HerdrMasterApp(App):
                 self.app_state.ai_head_info = head_info
                 self.app_state.ai_head_busy = bool(head_info.get("busy", False))
                 self._schedule_inventory_refresh()
+                logger.info(f"AiHead tab successfully ensured: {head_info}")
                 if focus and head_info and head_info.get("pane_id"):
                     target = WorkspaceTarget(
                         session_name=self.session_name or "default",
@@ -374,6 +383,7 @@ class HerdrMasterApp(App):
                 if force:
                     self.notify("AiHead tab ready.", severity="information")
             except Exception as exc:
+                logger.exception(f"Failed to initialize AiHead tab: {exc}")
                 info = self.app_state.ai_head_info
                 if info is not None:
                     info["status"] = "pending"
@@ -1293,8 +1303,39 @@ class HerdrMasterApp(App):
         )
 
     def action_launch_aihead(self) -> None:
-        """Launch, ensure, or focus the persistent interactive AiHead tab."""
+        """Launch, ensure, and switch to the dedicated full-page AiHead screen."""
         self._ensure_ai_head_if_enabled(force=True, focus=True)
+        if not isinstance(self.screen, AiHeadScreen):
+            cfg = getattr(self.app_state, "config", None)
+            model = cfg.ai_head.binding.model if cfg and cfg.ai_head else "gpt-6.1-sol"
+            harness = (
+                cfg.ai_head.binding.kind.value
+                if cfg and cfg.ai_head and hasattr(cfg.ai_head.binding.kind, "value")
+                else str(cfg.ai_head.binding.kind if cfg and cfg.ai_head else "opencode")
+            )
+            cwd = (
+                cfg.ai_head.cwd
+                if cfg and cfg.ai_head and cfg.ai_head.cwd
+                else str(self.project_path or Path.home())
+            )
+            status_val = (
+                self.app_state.ai_head_info.get("status", "ready")
+                if self.app_state.ai_head_info
+                else "ready"
+            )
+            screen = AiHeadScreen(
+                model=model,
+                harness=harness,
+                cwd=cwd,
+                status=status_val,
+            )
+            if self._last_live_frame is not None:
+                screen.update_live_frame(self._last_live_frame)
+            self.push_screen(screen)
+
+    def action_view_logs(self) -> None:
+        """Open diagnostic log viewer modal."""
+        self.push_screen(LogViewerModal())
 
     def on_quick_launch_bar_launch_ai_head_requested(
         self, event: QuickLaunchBar.LaunchAiHeadRequested

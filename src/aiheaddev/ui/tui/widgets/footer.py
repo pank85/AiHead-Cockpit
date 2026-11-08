@@ -33,6 +33,7 @@ class ActionFooter(Static):
                 ("n", "New Master"),
                 ("e", "New Ergo"),
                 ("s/c", "Settings"),
+                ("l", "Logs"),
                 ("o", "Open"),
                 ("d", "Delete WS"),
                 ("q", "Quit"),
@@ -43,6 +44,7 @@ class ActionFooter(Static):
                 ("n", "Master"),
                 ("e", "Ergo"),
                 ("s/c", "Settings"),
+                ("l", "Logs"),
                 ("o", "Open"),
                 ("d", "Del"),
                 ("q", "Quit"),
@@ -50,6 +52,7 @@ class ActionFooter(Static):
         else:
             keys = [
                 ("h", "Head"),
+                ("l", "Log"),
                 ("o", "Open"),
                 ("d", "Del"),
                 ("q", "Quit"),

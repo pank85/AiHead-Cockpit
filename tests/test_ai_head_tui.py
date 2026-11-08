@@ -484,3 +484,73 @@ async def test_quick_launch_aihead_button_and_keybinding(tmp_path):
             # Test QuickLaunchBar button #btn-new-aihead
             await pilot.click("#btn-new-aihead")
             assert mock_action.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_action_launch_aihead_pushes_dedicated_aihead_screen(tmp_path):
+    """Verify action_launch_aihead pushes the dedicated single-page AiHeadScreen."""
+    from aiheaddev.ui.tui.screens.ai_head_screen import AiHeadScreen
+
+    app = HerdrMasterApp(demo=False, project_path=tmp_path)
+    app.client = MagicMock()
+    app.client.socket_path = "/tmp/sock"
+    app.session_name = "test-session"
+    app.app_state.session_name = "test-session"
+
+    with patch("aiheaddev.ui.tui.app.ensure_herdr_ai_head", new_callable=AsyncMock) as mock_ensure:
+        mock_ensure.return_value = {
+            "workspace_id": "ws-1",
+            "tab_id": "tab-head",
+            "pane_id": "pane-head",
+            "reused": False,
+            "status": "ready",
+            "busy": False,
+        }
+        async with app.run_test(size=(120, 45)) as pilot:
+            await pilot.pause()
+            app.action_launch_aihead()
+            await pilot.pause()
+            assert isinstance(app.screen, AiHeadScreen)
+            # Verify AiHeadScreen has no WorkspaceBrowser tree on the same screen
+            assert len(app.screen.query("WorkspaceBrowser")) == 0
+            # Test pressing escape returns back to Cockpit
+            await pilot.press("escape")
+            await pilot.pause()
+            assert not isinstance(app.screen, AiHeadScreen)
+
+            # Test clicking header back button returns back to Cockpit
+            app.action_launch_aihead()
+            await pilot.pause()
+            assert isinstance(app.screen, AiHeadScreen)
+            await pilot.click("#btn-aihead-back")
+            await pilot.pause()
+            assert not isinstance(app.screen, AiHeadScreen)
+
+            # Test clicking footer back button returns back to Cockpit
+            app.action_launch_aihead()
+            await pilot.pause()
+            assert isinstance(app.screen, AiHeadScreen)
+            await pilot.click("#btn-aihead-back-footer")
+            await pilot.pause()
+            assert not isinstance(app.screen, AiHeadScreen)
+
+
+@pytest.mark.asyncio
+async def test_action_view_logs_opens_log_viewer_modal(tmp_path):
+    """Verify pressing 'l' opens the LogViewerModal and displays diagnostics."""
+    from aiheaddev.core.logging import get_logger
+    from aiheaddev.ui.tui.modals.log_viewer import LogViewerModal
+
+    logger = get_logger("test")
+    logger.info("Test diagnostic log event 12345")
+
+    app = HerdrMasterApp(demo=False, project_path=tmp_path)
+    app.client = MagicMock()
+
+    async with app.run_test(size=(110, 40)) as pilot:
+        await pilot.press("l")
+        await pilot.pause()
+        assert isinstance(app.screen, LogViewerModal)
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, LogViewerModal)

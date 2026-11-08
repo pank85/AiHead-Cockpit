@@ -1281,23 +1281,15 @@ class LivePaneController:
         keys_arg = keys if keys else None
 
         try:
-            if isinstance(client, HerdrClient):
-                if text_arg is not None:
-                    await asyncio.wait_for(
-                        client.pane_send_text(pane_id=pane_id, text=text_arg),
-                        timeout=self._send_timeout,
-                    )
-                if text_arg is not None and keys_arg is not None:
-                    await asyncio.sleep(0.02)
-                if keys_arg is not None:
-                    await asyncio.wait_for(
-                        client.pane_send_keys(pane_id=pane_id, keys=keys_arg),
-                        timeout=self._send_timeout,
-                    )
-            elif hasattr(client, "pane_send_input") and callable(client.pane_send_input):
+            if hasattr(client, "pane_send_input") and callable(client.pane_send_input):
                 res = client.pane_send_input(pane_id=pane_id, text=text_arg, keys=keys_arg)
                 if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
                     await asyncio.wait_for(res, timeout=self._send_timeout)
+            elif isinstance(client, HerdrClient):
+                await asyncio.wait_for(
+                    client.pane_send_input(pane_id=pane_id, text=text_arg, keys=keys_arg),
+                    timeout=self._send_timeout,
+                )
             elif hasattr(client, "pane_send_text") or hasattr(client, "pane_send_keys"):
                 if text_arg and callable(getattr(client, "pane_send_text", None)):
                     res = client.pane_send_text(pane_id=pane_id, text=text_arg)

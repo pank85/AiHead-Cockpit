@@ -16,8 +16,17 @@ from herdr_master.core.context import resolve_herdr_context
 from herdr_master.core.models import MasterSession, PipelinePhase, PipelineRun
 from herdr_master.herdr.client import HerdrClient
 from herdr_master.herdr.discovery import SessionInventory, discover_clients
-from herdr_master.herdr.snapshot import AgentSnapshot
-from herdr_master.pipeline.ai_head import ensure_herdr_ai_head
+from herdr_master.herdr.snapshot import (
+    AgentSnapshot,
+    PaneSnapshot,
+    SessionSnapshot,
+    TabSnapshot,
+)
+from herdr_master.pipeline.ai_head import (
+    DEAD_AGENT_STATUSES,
+    _resolve_agent_liveness,
+    ensure_herdr_ai_head,
+)
 from herdr_master.pipeline.launcher import (
     LaunchContextError,
     launch_council,
@@ -336,6 +345,68 @@ class HerdrMasterApp(App):
             self._ensure_ai_head_if_enabled()
             self.set_interval(3.0, self._schedule_inventory_refresh)
 
+    def _find_existing_live_ai_head(
+        self,
+        snap: Optional[SessionSnapshot] = None,
+        target_ws: Optional[str] = None,
+    ) -> Optional[tuple[TabSnapshot, PaneSnapshot, Optional[AgentSnapshot], str, Path]]:
+        """Find an existing live tab labeled 'ai-head' and its associated pane.
+
+        Returns (tab, pane, agent_snapshot, workspace_id, socket_path) if found and alive, else None.
+        """
+        snapshots_to_check: list[tuple[SessionSnapshot, Path]] = []
+        default_sock = Path(getattr(self.client, "socket_path", "")) if self.client else Path("")
+        if snap is not None:
+            snapshots_to_check.append((snap, default_sock))
+        if self.app_state.live_sessions:
+            for item in self.app_state.live_sessions:
+                if item.snapshot and not item.error:
+                    if snap is None or item.snapshot is not snap:
+                        snapshots_to_check.append((item.snapshot, Path(item.socket_path)))
+
+        ws_to_match = target_ws or getattr(self.app_state, "workspace_id", None)
+
+        for s_snap, s_sock in snapshots_to_check:
+            tabs = getattr(s_snap, "tabs", None)
+            panes = getattr(s_snap, "panes", None)
+            agents = getattr(s_snap, "agents", None)
+            if not isinstance(tabs, (list, tuple)) or not isinstance(panes, (list, tuple)):
+                continue
+
+            agents_list = list(agents) if isinstance(agents, (list, tuple)) else []
+            resolved_ws = ws_to_match
+            if not resolved_ws and hasattr(s_snap, "workspaces") and s_snap.workspaces:
+                resolved_ws = s_snap.focused_workspace_id or s_snap.workspaces[0].workspace_id
+
+            # 1. Match in resolved workspace first
+            if resolved_ws:
+                for tab in tabs:
+                    if tab.workspace_id == resolved_ws and (tab.label or "").strip() == "ai-head":
+                        for pane in panes:
+                            if pane.tab_id == tab.tab_id:
+                                is_alive, agent_rec = _resolve_agent_liveness(pane, agents_list)
+                                if not is_alive and agent_rec is not None:
+                                    raw_status = (agent_rec.agent_status or "").strip().lower()
+                                    if raw_status not in DEAD_AGENT_STATUSES:
+                                        is_alive = True
+                                if is_alive:
+                                    return tab, pane, agent_rec, resolved_ws, s_sock
+
+            # 2. Match across any workspace in this snapshot
+            for tab in tabs:
+                if (tab.label or "").strip() == "ai-head":
+                    for pane in panes:
+                        if pane.tab_id == tab.tab_id:
+                            is_alive, agent_rec = _resolve_agent_liveness(pane, agents_list)
+                            if not is_alive and agent_rec is not None:
+                                raw_status = (agent_rec.agent_status or "").strip().lower()
+                                if raw_status not in DEAD_AGENT_STATUSES:
+                                    is_alive = True
+                            if is_alive:
+                                return tab, pane, agent_rec, tab.workspace_id or resolved_ws or "default", s_sock
+
+        return None
+
     def _ensure_ai_head_if_enabled(self, *, force: bool = False, focus: bool = False) -> None:
         """Ensure persistent ai-head tab exists if AiHead is enabled in config or force=True."""
         if self.demo or self.client is None:
@@ -353,6 +424,7 @@ class HerdrMasterApp(App):
             try:
                 logger.info(f"Ensuring AiHead tab in workspace (force={force})...")
                 target_ws = getattr(self.app_state, "workspace_id", None)
+                snap: Optional[SessionSnapshot] = None
                 if (not target_ws or target_ws == "ws-01") and self.client is not None:
                     try:
                         snap = await self.client.get_snapshot()
@@ -362,13 +434,111 @@ class HerdrMasterApp(App):
                             )
                     except Exception:
                         pass
+                if snap is None and self.client is not None:
+                    try:
+                        snap = await self.client.get_snapshot()
+                    except Exception:
+                        pass
                 if not target_ws:
                     target_ws = "default"
+
+                existing = self._find_existing_live_ai_head(snap, target_ws=target_ws)
+                if existing is not None:
+                    existing_tab, existing_pane, existing_agent, ws_id, ex_sock = existing
+                    logger.info(
+                        f"Reusing existing live AiHead tab {existing_tab.tab_id} in workspace {ws_id}."
+                    )
+                    is_busy = False
+                    if existing_agent:
+                        raw_status = (existing_agent.agent_status or "").strip().lower()
+                        is_busy = raw_status in ("working", "busy")
+                    elif existing_pane.agent_status:
+                        raw_status = (existing_pane.agent_status or "").strip().lower()
+                        is_busy = raw_status in ("working", "busy")
+
+                    status_str = "busy" if is_busy else "ready"
+                    agent_kind = (
+                        existing_agent.agent
+                        if existing_agent and existing_agent.agent
+                        else (
+                            existing_pane.agent
+                            or (
+                                cfg.ai_head.binding.kind.value
+                                if cfg and cfg.ai_head and hasattr(cfg.ai_head.binding.kind, "value")
+                                else "opencode"
+                            )
+                        )
+                    )
+                    model_str = (
+                        getattr(cfg.ai_head.binding, "model", "gpt-6.1-sol")
+                        if cfg and cfg.ai_head
+                        else "gpt-6.1-sol"
+                    )
+                    head_info = {
+                        "workspace_id": existing_tab.workspace_id or ws_id,
+                        "tab_id": existing_tab.tab_id,
+                        "pane_id": existing_pane.pane_id,
+                        "reused": True,
+                        "enabled": True,
+                        "label": "ai-head",
+                        "agent_name": (
+                            existing_agent.name
+                            if existing_agent and existing_agent.name
+                            else "ai-head"
+                        ),
+                        "kind": agent_kind,
+                        "model": model_str,
+                        "busy": is_busy,
+                        "reconciled": True,
+                        "status": status_str,
+                    }
+                    if existing_tab.workspace_id:
+                        self.app_state.workspace_id = existing_tab.workspace_id
+                    self.app_state.ai_head_info = head_info
+                    self.app_state.ai_head_busy = is_busy
+                    self._schedule_inventory_refresh()
+
+                    should_focus = focus or getattr(self, "_ai_head_focus_requested", False)
+                    if should_focus:
+                        target = WorkspaceTarget(
+                            session_name=self.session_name or "default",
+                            socket_path=ex_sock or Path(getattr(self.client, "socket_path", "")),
+                            workspace_id=head_info.get("workspace_id") or ws_id,
+                            tab_id=head_info.get("tab_id"),
+                            pane_id=head_info.get("pane_id"),
+                        )
+                        self._ai_head_confirmed_target = target
+                        self.on_workspace_browser_selection_changed(
+                            WorkspaceBrowser.SelectionChanged(target)
+                        )
+                        for scr in self.screen_stack:
+                            if isinstance(scr, AiHeadScreen):
+                                scr.update_status(status_str)
+                        self.notify("AiHead tab ready.", severity="information")
+                    return
                 origin_cwd = (
                     str(Path(os.path.expanduser(cfg.ai_head.cwd)).resolve())
                     if (cfg and cfg.ai_head and cfg.ai_head.cwd)
                     else str((self.project_path or Path.cwd()).resolve())
                 )
+                # New AiHead should open in its own dedicated workspace
+                ai_head_ws_id = None
+                if snap is not None and hasattr(snap, "workspaces"):
+                    for ws in snap.workspaces:
+                        if (getattr(ws, "label", None) or "").strip() == "ai-head":
+                            ai_head_ws_id = ws.workspace_id
+                            break
+                if not ai_head_ws_id and self.client is not None and hasattr(self.client, "create_workspace"):
+                    try:
+                        ws_res = await self.client.create_workspace(label="ai-head", cwd=origin_cwd)
+                        if isinstance(ws_res, dict):
+                            ai_head_ws_id = ws_res.get("workspace_id") or ws_res.get("id")
+                    except Exception as exc:
+                        logger.warning(f"Could not create dedicated workspace for AiHead: {exc}")
+
+                if ai_head_ws_id:
+                    target_ws = ai_head_ws_id
+
                 head_info = await ensure_herdr_ai_head(
                     client=self.client,
                     workspace_id=target_ws,
@@ -1355,56 +1525,88 @@ class HerdrMasterApp(App):
 
     def action_launch_aihead(self) -> None:
         """Launch, ensure, and switch to the dedicated full-page AiHead screen."""
-        if not isinstance(self.screen, AiHeadScreen):
-            cfg = getattr(self.app_state, "config", None)
-            model = cfg.ai_head.binding.model if cfg and cfg.ai_head else "gpt-6.1-sol"
-            harness = (
-                cfg.ai_head.binding.kind.value
-                if cfg and cfg.ai_head and hasattr(cfg.ai_head.binding.kind, "value")
-                else str(cfg.ai_head.binding.kind if cfg and cfg.ai_head else "opencode")
-            )
-            cwd = (
-                cfg.ai_head.cwd
-                if cfg and cfg.ai_head and cfg.ai_head.cwd
-                else str(self.project_path or Path.home())
+        existing_screen = next(
+            (s for s in self.screen_stack if isinstance(s, AiHeadScreen)), None
+        )
+        if existing_screen is not None:
+            while len(self.screen_stack) > 1 and self.screen is not existing_screen:
+                self.pop_screen()
+            if self._last_live_frame is not None:
+                existing_screen.update_live_frame(self._last_live_frame)
+            try:
+                existing_screen._live_pane_view.focus_input()
+            except Exception:
+                pass
+            return
+
+        cfg = getattr(self.app_state, "config", None)
+        model = cfg.ai_head.binding.model if cfg and cfg.ai_head else "gpt-6.1-sol"
+        harness = (
+            cfg.ai_head.binding.kind.value
+            if cfg and cfg.ai_head and hasattr(cfg.ai_head.binding.kind, "value")
+            else str(cfg.ai_head.binding.kind if cfg and cfg.ai_head else "opencode")
+        )
+        cwd = (
+            cfg.ai_head.cwd
+            if cfg and cfg.ai_head and cfg.ai_head.cwd
+            else str(self.project_path or Path.home())
+        )
+
+        existing_live = self._find_existing_live_ai_head()
+        if existing_live is not None and self._ai_head_confirmed_target is None:
+            ex_tab, ex_pane, ex_agent, ex_ws, ex_sock = existing_live
+            self._ai_head_confirmed_target = WorkspaceTarget(
+                session_name=self.session_name or "default",
+                socket_path=ex_sock or Path(getattr(self.client, "socket_path", "")),
+                workspace_id=ex_ws,
+                tab_id=ex_tab.tab_id,
+                pane_id=ex_pane.pane_id,
             )
 
-            can_reuse = (
-                self._ai_head_confirmed_target is not None
-                and self._last_live_frame is not None
-                and self._live_key(self._last_live_frame.target) == self._live_key(self._ai_head_confirmed_target)
-            )
+        can_reuse = (
+            self._ai_head_confirmed_target is not None
+            and self._last_live_frame is not None
+            and self._live_key(self._last_live_frame.target) == self._live_key(self._ai_head_confirmed_target)
+        )
 
+        if existing_live is not None:
+            _, _, ex_agent, _, _ = existing_live
+            ex_busy = bool(
+                ex_agent and (ex_agent.agent_status or "").strip().lower() in ("working", "busy")
+            )
             status_val = (
-                self.app_state.ai_head_info.get("status", "ready")
-                if (can_reuse and self.app_state.ai_head_info)
-                else "pending"
+                self.app_state.ai_head_info.get("status", "busy" if ex_busy else "ready")
+                if self.app_state.ai_head_info
+                else ("busy" if ex_busy else "ready")
             )
+        elif can_reuse and self.app_state.ai_head_info:
+            status_val = self.app_state.ai_head_info.get("status", "ready")
+        else:
+            status_val = "pending"
 
-            screen = AiHeadScreen(
-                model=model,
-                harness=harness,
-                cwd=cwd,
-                status=status_val,
+        screen = AiHeadScreen(
+            model=model,
+            harness=harness,
+            cwd=cwd,
+            status=status_val,
+        )
+
+        if can_reuse and self._last_live_frame is not None:
+            screen.update_live_frame(self._last_live_frame)
+        else:
+            pending_frame = PaneFrame(
+                lease=None,
+                target=None,
+                phase="loading",
+                agent_status="pending",
+                text_ansi="",
+                error=None,
+                can_reply=False,
+                reply_eligible=False,
             )
+            screen.update_live_frame(pending_frame)
 
-            if can_reuse and self._last_live_frame is not None:
-                screen.update_live_frame(self._last_live_frame)
-            else:
-                pending_frame = PaneFrame(
-                    lease=None,
-                    target=None,
-                    phase="loading",
-                    agent_status="pending",
-                    text_ansi="",
-                    error=None,
-                    can_reply=False,
-                    reply_eligible=False,
-                )
-                screen.update_live_frame(pending_frame)
-
-            self.push_screen(screen)
-
+        self.push_screen(screen)
         self._ensure_ai_head_if_enabled(force=True, focus=True)
 
     def action_view_logs(self) -> None:

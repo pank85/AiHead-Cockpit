@@ -224,6 +224,49 @@ async def test_ensure_ai_head_if_enabled_live_mode():
 
 
 @pytest.mark.asyncio
+async def test_ensure_ai_head_reconciles_default_ws_01_from_live_snapshot():
+    """Verify that when app_state.workspace_id has default 'ws-01' or None,
+    _ensure_ai_head_if_enabled queries the snapshot and uses the live workspace."""
+    cfg = HerdrMasterConfig()
+    cfg.ai_head.enabled = True
+    cfg.ai_head.binding = HarnessBinding(kind=HarnessKind.AGY, model="claude-3-5-sonnet")
+
+    app = HerdrMasterApp(demo=False)
+    snap = SessionSnapshot(
+        protocol=22,
+        focused_workspace_id="ws-real-herdr",
+        workspaces=[WorkspaceSnapshot(workspace_id="ws-real-herdr", label="live")],
+        tabs=[],
+        panes=[],
+    )
+    mock_client = MagicMock()
+    mock_client.get_snapshot = AsyncMock(return_value=snap)
+    app.client = mock_client
+    app.app_state.config = cfg
+    # Default state has workspace_id as None or ws-01
+    app.app_state.workspace_id = "ws-01"
+
+    with patch("aiheaddev.ui.tui.app.ensure_herdr_ai_head", new_callable=AsyncMock) as mock_ensure:
+        mock_ensure.return_value = {
+            "workspace_id": "ws-real-herdr",
+            "tab_id": "tab-head",
+            "pane_id": "pane-head",
+            "reused": True,
+            "enabled": True,
+            "label": "ai-head",
+        }
+        with patch.object(app, "_schedule_inventory_refresh"):
+            app._ensure_ai_head_if_enabled()
+            await asyncio.sleep(0.1)
+
+            mock_ensure.assert_awaited_once()
+            _, kwargs = mock_ensure.call_args
+            assert kwargs["workspace_id"] == "ws-real-herdr"
+            assert app.app_state.workspace_id == "ws-real-herdr"
+
+
+
+@pytest.mark.asyncio
 async def test_council_launch_flow(tmp_path):
     """Verify action_new_council executes launch_council and updates app_state.pipeline_run."""
     app = HerdrMasterApp(demo=False, project_path=tmp_path)

@@ -213,7 +213,7 @@ class AppState(BaseModel):
 
     session_name: str = "default"
     workspace_label: str = "ergo-cockpit"
-    workspace_id: str = "ws-01"
+    workspace_id: Optional[str] = None
     target_branch: str = "develop"
     branch_status: str = "CLEAN"
     socket_connected: bool = True

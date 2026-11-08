@@ -321,11 +321,15 @@ class HerdrMasterApp(App):
         async def _run_ensure() -> None:
             try:
                 target_ws = getattr(self.app_state, "workspace_id", None)
-                if not target_ws and self.client is not None:
-                    snap = await self.client.get_snapshot()
-                    target_ws = snap.focused_workspace_id or (
-                        snap.workspaces[0].workspace_id if snap.workspaces else None
-                    )
+                if (not target_ws or target_ws == "ws-01") and self.client is not None:
+                    try:
+                        snap = await self.client.get_snapshot()
+                        if hasattr(snap, "workspaces"):
+                            target_ws = snap.focused_workspace_id or (
+                                snap.workspaces[0].workspace_id if snap.workspaces else target_ws
+                            )
+                    except Exception:
+                        pass
                 if not target_ws:
                     return
                 origin_cwd = str((self.project_path or Path.cwd()).resolve())
@@ -335,6 +339,8 @@ class HerdrMasterApp(App):
                     head_config=cfg.ai_head,
                     origin_cwd=origin_cwd,
                 )
+                if head_info and "workspace_id" in head_info:
+                    self.app_state.workspace_id = head_info["workspace_id"]
                 self.app_state.ai_head_info = head_info
                 self.app_state.ai_head_busy = bool(head_info.get("busy", False))
                 self._schedule_inventory_refresh()

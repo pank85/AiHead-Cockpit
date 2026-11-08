@@ -29,6 +29,7 @@ class ActionFooter(Static):
         t = Text()
         if width >= 75:
             keys = [
+                ("h", "AiHead"),
                 ("n", "New Master"),
                 ("e", "New Ergo"),
                 ("s/c", "Settings"),
@@ -38,6 +39,7 @@ class ActionFooter(Static):
             ]
         elif width >= 55:
             keys = [
+                ("h", "AiHead"),
                 ("n", "Master"),
                 ("e", "Ergo"),
                 ("s/c", "Settings"),
@@ -47,6 +49,7 @@ class ActionFooter(Static):
             ]
         else:
             keys = [
+                ("h", "Head"),
                 ("o", "Open"),
                 ("d", "Del"),
                 ("q", "Quit"),

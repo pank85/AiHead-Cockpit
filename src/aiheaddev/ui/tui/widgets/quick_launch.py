@@ -92,6 +92,20 @@ class QuickLaunchBar(Static):
         color: #FFFFFF;
     }
 
+    QuickLaunchBar #btn-new-aihead {
+        background: #D97706;
+        color: #F8FAFC;
+    }
+    QuickLaunchBar #btn-new-aihead:hover {
+        background: #B45309;
+    }
+    QuickLaunchBar #btn-new-aihead:focus {
+        background: #D97706;
+        border-top: solid #FBBF24;
+        border-bottom: solid #FBBF24;
+        color: #FFFFFF;
+    }
+
     QuickLaunchBar #btn-settings {
         background: #334155;
         color: #F8FAFC;
@@ -119,11 +133,22 @@ class QuickLaunchBar(Static):
     class LaunchCouncilRequested(Message):
         """User requested to launch an AI Council deliberation run."""
 
+    class LaunchAiHeadRequested(Message):
+        """User requested to launch or open AiHead."""
+
     class OpenSettingsRequested(Message):
         """User requested to configure squad/settings."""
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="launch-container"):
+            with Vertical(classes="launch-action"):
+                yield Button(
+                    "AiHead",
+                    id="btn-new-aihead",
+                    variant="primary",
+                    tooltip="[h] Open or initialize the interactive AiHead terminal session.",
+                )
+                yield Static("Interactive AI Head", classes="launch-description")
             with Vertical(classes="launch-action"):
                 yield Button(
                     "New Master",
@@ -165,7 +190,9 @@ class QuickLaunchBar(Static):
                 )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "btn-new-master":
+        if event.button.id == "btn-new-aihead":
+            self.post_message(self.LaunchAiHeadRequested())
+        elif event.button.id == "btn-new-master":
             self.post_message(self.LaunchMasterRequested())
         elif event.button.id == "btn-new-ergo":
             self.post_message(self.LaunchErgoRequested())

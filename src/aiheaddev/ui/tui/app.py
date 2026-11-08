@@ -81,6 +81,7 @@ class HerdrMasterApp(App):
     TITLE = "HERDR-MASTER Cockpit"
 
     BINDINGS = [
+        Binding("h", "launch_aihead", "AiHead"),
         Binding("n", "new_master", "New Master"),
         Binding("e", "new_ergo", "New Ergo"),
         Binding("s", "open_settings", "Settings"),
@@ -285,6 +286,15 @@ class HerdrMasterApp(App):
         project_cfg: Optional[HerdrMasterConfig] = None
         try:
             project_cfg = load_project_config(self.project_path)
+            if project_cfg and not project_cfg.ai_head.enabled and not self.project_path:
+                home_cfg_file = Path.home() / ".herdr-master.toml"
+                if home_cfg_file.is_file():
+                    try:
+                        home_cfg = load_project_config(home_cfg_file)
+                        if home_cfg.ai_head.enabled:
+                            project_cfg.ai_head = home_cfg.ai_head
+                    except Exception:
+                        pass
         except Exception:
             pass
         return self._state(squad=resolved.squad, config=project_cfg)
@@ -308,12 +318,12 @@ class HerdrMasterApp(App):
             self._ensure_ai_head_if_enabled()
             self.set_interval(3.0, self._schedule_inventory_refresh)
 
-    def _ensure_ai_head_if_enabled(self) -> None:
-        """Ensure persistent ai-head tab exists if AiHead is enabled in config."""
+    def _ensure_ai_head_if_enabled(self, *, force: bool = False, focus: bool = False) -> None:
+        """Ensure persistent ai-head tab exists if AiHead is enabled in config or force=True."""
         if self.demo or self.client is None:
             return
         cfg = getattr(self.app_state, "config", None)
-        if not cfg or not cfg.ai_head.enabled:
+        if not cfg or (not cfg.ai_head.enabled and not force):
             return
         if self._ai_head_ensure_pending:
             return
@@ -343,12 +353,28 @@ class HerdrMasterApp(App):
                     workspace_id=target_ws,
                     head_config=cfg.ai_head,
                     origin_cwd=origin_cwd,
+                    force=force,
                 )
                 if head_info and "workspace_id" in head_info:
                     self.app_state.workspace_id = head_info["workspace_id"]
                 self.app_state.ai_head_info = head_info
                 self.app_state.ai_head_busy = bool(head_info.get("busy", False))
                 self._schedule_inventory_refresh()
+                if focus and head_info and head_info.get("pane_id"):
+                    target = WorkspaceTarget(
+                        session_name=self.session_name or "default",
+                        socket_path=Path(getattr(self.client, "socket_path", "")),
+                        workspace_id=head_info.get("workspace_id") or target_ws,
+                        pane_id=head_info.get("pane_id"),
+                        tab_id=head_info.get("tab_id"),
+                        agent_name="ai-head",
+                        is_agent=True,
+                        agent_status="ready",
+                        title="AiHead",
+                    )
+                    self.post_message(TargetSelected(target))
+                if force:
+                    self.notify("AiHead tab ready.", severity="information")
             except Exception as exc:
                 info = self.app_state.ai_head_info
                 if info is not None:
@@ -1267,6 +1293,15 @@ class HerdrMasterApp(App):
             ),
             _on_modal_dismiss,
         )
+
+    def action_launch_aihead(self) -> None:
+        """Launch, ensure, or focus the persistent interactive AiHead tab."""
+        self._ensure_ai_head_if_enabled(force=True, focus=True)
+
+    def on_quick_launch_bar_launch_ai_head_requested(
+        self, event: QuickLaunchBar.LaunchAiHeadRequested
+    ) -> None:
+        self.action_launch_aihead()
 
     def on_quick_launch_bar_launch_master_requested(
         self, event: QuickLaunchBar.LaunchMasterRequested

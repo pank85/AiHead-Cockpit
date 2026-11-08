@@ -464,3 +464,23 @@ async def test_working_snapshot_sets_busy_only():
     ensure.assert_not_awaited()
     assert app.app_state.ai_head_busy is True
     assert app.app_state.ai_head_info["busy"] is True
+
+
+@pytest.mark.asyncio
+async def test_quick_launch_aihead_button_and_keybinding(tmp_path):
+    """Verify clicking the AiHead button or pressing 'h' triggers action_launch_aihead."""
+    app = HerdrMasterApp(demo=False, project_path=tmp_path)
+    app.client = MagicMock()
+    app.session_name = "test-session"
+    app.app_state.session_name = "test-session"
+    app.app_state.workspace_id = "ws-test"
+
+    with patch.object(app, "action_launch_aihead") as mock_action:
+        async with app.run_test(size=(110, 40)) as pilot:
+            # Test keybinding 'h'
+            await pilot.press("h")
+            assert mock_action.call_count == 1
+
+            # Test QuickLaunchBar button #btn-new-aihead
+            await pilot.click("#btn-new-aihead")
+            assert mock_action.call_count == 2

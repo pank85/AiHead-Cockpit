@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Iterable, List, Optional
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.screen import ModalScreen
@@ -85,6 +86,10 @@ class FolderTree(DirectoryTree):
 class ProjectFolderPicker(ModalScreen[Optional[Path]]):
     """Select a directory, never a file; browsing does not change process cwd."""
 
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel", priority=False, show=False),
+    ]
+
     DEFAULT_CSS = """
     ProjectFolderPicker { align: center middle; background: rgba(11, 15, 25, 0.85); }
     ProjectFolderPicker > Vertical {
@@ -104,6 +109,7 @@ class ProjectFolderPicker(ModalScreen[Optional[Path]]):
     def __init__(self, folder: Path) -> None:
         super().__init__()
         self.folder = folder if folder.is_dir() else Path.home()
+        self._dismissed = False
         with _ensure_active_app():
             self._path = Input(value=str(self.folder), id="folder-location")
             self._tree = FolderTree(self.folder, id="folder-tree")
@@ -122,6 +128,12 @@ class ProjectFolderPicker(ModalScreen[Optional[Path]]):
             with Horizontal():
                 yield Button("Use Folder", id="folder-select", variant="primary")
                 yield Button("Cancel", id="folder-cancel")
+
+    def action_cancel(self) -> None:
+        if self._dismissed:
+            return
+        self._dismissed = True
+        self.dismiss(None)
 
     def _go(self, value: str) -> None:
         try:
@@ -144,7 +156,7 @@ class ProjectFolderPicker(ModalScreen[Optional[Path]]):
         event.stop()
         action = event.button.id
         if action == "folder-cancel":
-            self.dismiss(None)
+            self.action_cancel()
         elif action == "folder-go":
             self._go(self._path.value)
         elif action == "folder-up":
@@ -160,6 +172,9 @@ class ProjectFolderPicker(ModalScreen[Optional[Path]]):
             except (ValueError, OSError) as exc:
                 self._error.update(str(exc))
                 return
+            if self._dismissed:
+                return
+            self._dismissed = True
             self.dismiss(folder)
 
 
@@ -263,9 +278,15 @@ class ProjectFolderField(Vertical):
         except (ValueError, OSError):
             folder = Path.home()
 
+        browse_btn = self.query_one("#btn-browse-project", Button)
+
         def selected(path: Optional[Path]) -> None:
             if path is not None:
                 self._input.value = str(path)
                 self.post_message(self.Changed())
+            try:
+                browse_btn.focus()
+            except Exception:
+                pass
 
         self.app.push_screen(ProjectFolderPicker(folder), selected)

@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any, Optional
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -41,7 +42,7 @@ class AiHeadScreen(Screen[None]):
         color: #FFFFFF;
         text-style: bold;
         min-width: 22;
-        height: 3;
+        height: 2;
         border: none;
         margin-right: 1;
     }
@@ -52,13 +53,13 @@ class AiHeadScreen(Screen[None]):
         text-style: bold;
         color: #FBBF24;
         width: auto;
-        padding: 1 1;
+        padding: 0 1;
     }
     #aihead-screen-meta {
         margin-left: 1;
         color: #94A3B8;
         width: 1fr;
-        padding: 1 0;
+        padding: 0;
         overflow: hidden;
         text-overflow: ellipsis;
     }
@@ -68,7 +69,7 @@ class AiHeadScreen(Screen[None]):
     }
     #aihead-screen-actions Button {
         margin-left: 1;
-        height: 3;
+        height: 2;
         border: none;
     }
     #aihead-screen-body {
@@ -98,7 +99,7 @@ class AiHeadScreen(Screen[None]):
         text-style: bold;
         margin-right: 2;
         min-width: 22;
-        height: 3;
+        height: 2;
         border: none;
     }
     #btn-aihead-back-footer:hover {
@@ -106,7 +107,44 @@ class AiHeadScreen(Screen[None]):
     }
     #aihead-footer-hints {
         width: 1fr;
-        padding: 1 0;
+        padding: 0;
+    }
+
+    /* Narrow responsive breakpoint (<100 columns) */
+    AiHeadScreen.-narrow #aihead-screen-header {
+        height: 3;
+        padding: 0 1;
+    }
+    AiHeadScreen.-narrow #btn-aihead-back {
+        min-width: 0;
+        margin-right: 1;
+        padding: 0 1;
+        height: 2;
+    }
+    AiHeadScreen.-narrow #aihead-screen-title {
+        display: none;
+    }
+    AiHeadScreen.-narrow #aihead-screen-meta {
+        display: none;
+    }
+    AiHeadScreen.-narrow #aihead-screen-actions {
+        width: 1fr;
+        align: right middle;
+    }
+    AiHeadScreen.-narrow #aihead-screen-actions Button {
+        min-width: 0;
+        margin-left: 1;
+        padding: 0 1;
+        height: 2;
+    }
+    AiHeadScreen.-narrow #btn-aihead-back-footer {
+        min-width: 0;
+        margin-right: 1;
+        padding: 0 1;
+        height: 2;
+    }
+    AiHeadScreen.-narrow #aihead-footer-hints {
+        display: none;
     }
     """
 
@@ -124,6 +162,7 @@ class AiHeadScreen(Screen[None]):
         self.cwd = cwd or str(Path.home())
         self.status = status
         self._live_pane_view = LivePaneView(id="aihead-fullscreen-live-pane")
+        self._pending_frame: Optional[PaneFrame] = None
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="aihead-screen-header"):
@@ -143,17 +182,72 @@ class AiHeadScreen(Screen[None]):
                 id="aihead-footer-hints",
             )
 
+    def _update_geometry(self, width: int) -> None:
+        is_narrow = width < 100
+        if is_narrow:
+            self.add_class("-narrow")
+        else:
+            self.remove_class("-narrow")
+
+        try:
+            btn_back = self.query_one("#btn-aihead-back", Button)
+            btn_back_footer = self.query_one("#btn-aihead-back-footer", Button)
+            btn_settings = self.query_one("#btn-aihead-settings", Button)
+            btn_logs = self.query_one("#btn-aihead-logs", Button)
+
+            if is_narrow:
+                btn_back.label = "← Back"
+                btn_back_footer.label = "← Back"
+                btn_settings.label = "Settings"
+                btn_logs.label = "Logs"
+            else:
+                btn_back.label = "← Back to Workspaces"
+                btn_back_footer.label = "← Back to Workspaces"
+                btn_settings.label = "⚙ Settings"
+                btn_logs.label = "📋 Logs"
+        except Exception:
+            pass
+
     def on_mount(self) -> None:
+        width = self.size.width if self.size.width > 0 else (self.app.size.width if self.app else 120)
+        self._update_geometry(width)
+        if self._pending_frame is not None:
+            self._live_pane_view.update_frame(self._pending_frame)
         self._live_pane_view.focus_input()
+
+    def on_resize(self, event: events.Resize) -> None:
+        self._update_geometry(event.size.width)
+
+    def on_live_pane_view_focus_return_requested(
+        self, event: LivePaneView.FocusReturnRequested
+    ) -> None:
+        event.stop()
+        try:
+            self.query_one("#btn-aihead-back").focus()
+        except Exception:
+            pass
 
     def update_live_frame(self, frame: PaneFrame) -> None:
         """Update live stream from background PTY controller."""
-        self._live_pane_view.update_frame(frame)
+        self._pending_frame = frame
+        if self._live_pane_view is not None:
+            self._live_pane_view.update_frame(frame)
+
+    def update_status(self, status: str) -> None:
+        """Update header metadata status indicator."""
+        self.status = status
+        try:
+            meta = self.query_one("#aihead-screen-meta", Static)
+            meta.update(f"· [{self.harness}] {self.model} · 📁 {self.cwd} · ● {self.status}")
+        except Exception:
+            pass
 
     def action_dismiss_screen(self) -> None:
         """Return to main Cockpit workspace tree view."""
         if self.app.screen is self:
             self.app.pop_screen()
+            if hasattr(self.app, "_focus_cockpit_tree"):
+                self.app._focus_cockpit_tree()
 
     def action_open_settings(self) -> None:
         """Open settings modal from AiHead screen."""

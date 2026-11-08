@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import pyte
 from rich.text import Text
@@ -257,14 +257,7 @@ class LivePaneOutput(VerticalScroll):
     def on_key(self, event: events.Key) -> None:
         if event.key in ("ctrl+right_square_bracket", "ctrl+]", "ctrl+close_bracket"):
             event.stop()
-            try:
-                browser = self.app.query_one("WorkspaceBrowser")
-                try:
-                    browser.query_one("#workspace-tree").focus()
-                except Exception:
-                    browser.focus()
-            except Exception:
-                pass
+            self.post_message(LivePaneView.FocusReturnRequested(origin=self))
             return
 
         if event.key == "escape":
@@ -552,6 +545,13 @@ class LivePaneView(Vertical):
     class DraftCancelled(Message):
         """Operator cancelled the unsent draft."""
 
+    class FocusReturnRequested(Message):
+        """Operator requested to return keyboard focus out of output or prompt."""
+
+        def __init__(self, origin: Any = None) -> None:
+            super().__init__()
+            self.origin = origin
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._identity = Static("No pane selected", id="live-pane-identity")
@@ -683,8 +683,10 @@ class LivePaneView(Vertical):
         self._refresh_state()
         self._refresh_controls()
 
-        if frame.phase in ("empty", "stale", "unavailable") or not (
-            frame.target and frame.target.pane_id
+        if (
+            frame.phase in ("empty", "stale", "unavailable")
+            or not (frame.target and frame.target.pane_id)
+            or frame.reply_eligible is False
         ):
             self._pending_focus = False
         elif (
@@ -692,6 +694,7 @@ class LivePaneView(Vertical):
             and frame.phase in ("live", "degraded")
             and frame.lease is not None
             and not self._draft_invalid
+            and frame.reply_eligible is not False
             and not self._prompt_input.disabled
         ):
             self._pending_focus = False
@@ -846,10 +849,13 @@ class LivePaneView(Vertical):
         elif self._current_frame.lease is None:
             self._prompt_input.disabled = True
             self._prompt_input.placeholder = "Terminal input disabled in demo mode"
+        elif self._current_frame.reply_eligible is False:
+            self._prompt_input.disabled = True
+            self._prompt_input.placeholder = "Agent is not ready for input"
         else:
             self._prompt_input.disabled = False
             self._prompt_input.placeholder = (
-                "Type command or prompt and press Enter… (Esc for tree)"
+                "Type command or prompt and press Enter… (Esc to exit focus)"
             )
 
         if self._draft_lease is not None:
@@ -1005,13 +1011,15 @@ class LivePaneView(Vertical):
     def focus_input(self) -> None:
         """Focus the inline prompt input now, or as soon as the selected pane becomes live."""
         self._pending_focus = True
+        self._refresh_controls()
         if (
             self._current_frame is not None
             and self._current_frame.phase in ("live", "degraded")
             and self._current_frame.lease is not None
             and not self._draft_invalid
+            and self._current_frame.reply_eligible is not False
+            and not self._prompt_input.disabled
         ):
-            self._prompt_input.disabled = False
             self._prompt_input.focus()
             self.call_after_refresh(self._prompt_input.focus)
             self._pending_focus = False
@@ -1026,14 +1034,7 @@ class LivePaneView(Vertical):
             "ctrl+close_bracket",
         ):
             event.stop()
-            try:
-                browser = self.app.query_one("WorkspaceBrowser")
-                try:
-                    browser.query_one("#workspace-tree").focus()
-                except Exception:
-                    browser.focus()
-            except Exception:
-                pass
+            self.post_message(self.FocusReturnRequested(origin=self._prompt_input))
             return
 
         if event.key == "ctrl+c" and self._prompt_input.value != "":
@@ -1098,3 +1099,7 @@ class LivePaneView(Vertical):
             )
             self._refresh_controls()
             self._refresh_state()
+
+
+FocusReturnRequested = LivePaneView.FocusReturnRequested
+

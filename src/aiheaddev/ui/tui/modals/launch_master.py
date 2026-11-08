@@ -5,7 +5,9 @@ from typing import Optional
 
 from pydantic import BaseModel
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.events import Resize
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select, Static
 
@@ -39,6 +41,10 @@ class LaunchMasterModal(ModalScreen[Optional[MasterLaunchParams]]):
     override and requires a model. A typed model is not replaced by a preset.
     """
 
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel", priority=False, show=False),
+    ]
+
     DEFAULT_CSS = """
     LaunchMasterModal {
         align: center middle;
@@ -46,6 +52,7 @@ class LaunchMasterModal(ModalScreen[Optional[MasterLaunchParams]]):
     }
     .modal-box {
         width: 72;
+        max-width: 95%;
         height: 100%;
         max-height: 100%;
         background: #161E2E;
@@ -83,6 +90,10 @@ class LaunchMasterModal(ModalScreen[Optional[MasterLaunchParams]]):
         margin: 0 1;
         min-width: 14;
     }
+    LaunchMasterModal.narrow .button-bar Button {
+        min-width: 0;
+        margin: 0 1;
+    }
     #btn-launch {
         background: #0284C7;
         color: #F8FAFC;
@@ -119,6 +130,7 @@ class LaunchMasterModal(ModalScreen[Optional[MasterLaunchParams]]):
         self._programmatic_model = model
         self._syncing = False
         self._submitting = False
+        self._dismissed = False
         self.status_text = ""
         effort_options = effort_select_options(kind.value, model)
         self._name_input = Input(value=default_name, placeholder="e.g. master-coordinator")
@@ -192,9 +204,17 @@ class LaunchMasterModal(ModalScreen[Optional[MasterLaunchParams]]):
                 yield Button("Cancel", id="btn-cancel", variant="default")
 
     def on_mount(self) -> None:
+        self._adapt_layout(self.size.width)
         if self.config_error:
             self._set_status(self.config_error)
         self._refresh_preview()
+
+    def on_resize(self, event: Resize) -> None:
+        if self.is_mounted:
+            self._adapt_layout(event.size.width)
+
+    def _adapt_layout(self, width: int) -> None:
+        self.set_class(width < 72, "narrow")
 
     def on_project_folder_field_changed(self, event: ProjectFolderField.Changed) -> None:
         event.stop()
@@ -274,11 +294,17 @@ class LaunchMasterModal(ModalScreen[Optional[MasterLaunchParams]]):
                 self._set_effort(str(self._effort_select.value))
         self._refresh_preview()
 
+    def action_cancel(self) -> None:
+        if self._dismissed:
+            return
+        self._dismissed = True
+        self.dismiss(None)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-cancel":
-            self.dismiss(None)
+            self.action_cancel()
             return
-        if event.button.id != "btn-launch" or self._submitting:
+        if event.button.id != "btn-launch" or self._submitting or self._dismissed:
             return
         name = self._name_input.value.strip() or self.default_name
         try:
@@ -289,6 +315,7 @@ class LaunchMasterModal(ModalScreen[Optional[MasterLaunchParams]]):
             self._set_status(str(exc))
             return
         self._submitting = True
+        self._dismissed = True
         aihead_val = str(self._aihead_select.value)
         ai_head_override = True if aihead_val == "enable" else (False if aihead_val == "disable" else None)
         self.dismiss(

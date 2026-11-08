@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.events import Resize
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Select, Static
 
@@ -47,7 +48,7 @@ class LaunchOrchestrationModal(ModalScreen[Optional[OrchestrationLaunchParams]])
     """
 
     BINDINGS = [
-        Binding("escape", "cancel", "Cancel", show=False),
+        Binding("escape", "cancel", "Cancel", priority=False, show=False),
     ]
 
     DEFAULT_CSS = """
@@ -115,6 +116,10 @@ class LaunchOrchestrationModal(ModalScreen[Optional[OrchestrationLaunchParams]])
         margin: 0 1;
         min-width: 14;
     }
+    LaunchOrchestrationModal.narrow .button-bar Button {
+        min-width: 0;
+        margin: 0 1;
+    }
     #btn-launch {
         background: #059669;
         color: #F8FAFC;
@@ -145,6 +150,7 @@ class LaunchOrchestrationModal(ModalScreen[Optional[OrchestrationLaunchParams]])
         self.project_path = initial_project_folder(project_path)
         self.config_error = config_error
         self._submitting = False
+        self._dismissed = False
 
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         self.default_label = f"orch-{ts}"
@@ -241,8 +247,22 @@ class LaunchOrchestrationModal(ModalScreen[Optional[OrchestrationLaunchParams]])
                 yield Button("Cancel", id="btn-cancel", variant="default")
 
     def on_mount(self) -> None:
+        self._adapt_layout(self.size.width)
         if self.config_error:
             self._set_status(self.config_error)
+
+    def on_resize(self, event: Resize) -> None:
+        if self.is_mounted:
+            self._adapt_layout(event.size.width)
+
+    def _adapt_layout(self, width: int) -> None:
+        is_narrow = width < 72
+        self.set_class(is_narrow, "narrow")
+        try:
+            launch_btn = self.query_one("#btn-launch", Button)
+            launch_btn.label = "Launch" if is_narrow else "Launch Orchestration"
+        except Exception:
+            pass
 
     def _set_status(self, text: str) -> None:
         self.editor.set_status(text)
@@ -257,11 +277,17 @@ class LaunchOrchestrationModal(ModalScreen[Optional[OrchestrationLaunchParams]])
         except (ValueError, OSError) as exc:
             self._set_status(str(exc))
 
+    def action_cancel(self) -> None:
+        if self._dismissed:
+            return
+        self._dismissed = True
+        self.dismiss(None)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-cancel":
-            self.dismiss(None)
+            self.action_cancel()
             return
-        if event.button.id != "btn-launch" or self._submitting:
+        if event.button.id != "btn-launch" or self._submitting or self._dismissed:
             return
 
         intent = self._intent_input.value.strip()
@@ -288,6 +314,7 @@ class LaunchOrchestrationModal(ModalScreen[Optional[OrchestrationLaunchParams]])
         ai_head_override = True if aihead_val == "enable" else (False if aihead_val == "disable" else None)
 
         self._submitting = True
+        self._dismissed = True
         params = OrchestrationLaunchParams(
             intent=intent,
             workspace_label=label,
@@ -304,6 +331,3 @@ class LaunchOrchestrationModal(ModalScreen[Optional[OrchestrationLaunchParams]])
             ai_head_override=ai_head_override,
         )
         self.dismiss(params)
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)

@@ -3,6 +3,7 @@
 from typing import Optional
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Static
@@ -11,6 +12,10 @@ from textual.widgets import Button, Input, Static
 class PromptDialog(ModalScreen[Optional[str]]):
     """Modal dialog allowing operator to prompt an active agent pane."""
 
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel", priority=False, show=False),
+    ]
+
     DEFAULT_CSS = """
     PromptDialog {
         align: center middle;
@@ -18,6 +23,7 @@ class PromptDialog(ModalScreen[Optional[str]]):
     }
     .prompt-box {
         width: 70;
+        max-width: 95%;
         height: auto;
         background: #161E2E;
         border: thick #A855F7;
@@ -58,6 +64,7 @@ class PromptDialog(ModalScreen[Optional[str]]):
         super().__init__(**kwargs)
         self.target_name = target_name
         self._input = Input(placeholder="Enter prompt instructions...")
+        self._dismissed = False
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="prompt-box"):
@@ -67,7 +74,16 @@ class PromptDialog(ModalScreen[Optional[str]]):
                 yield Button("Send Prompt", id="btn-send", variant="success")
                 yield Button("Cancel", id="btn-cancel", variant="default")
 
+    def action_cancel(self) -> None:
+        if self._dismissed:
+            return
+        self._dismissed = True
+        self.dismiss(None)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        if self._dismissed:
+            return
+        self._dismissed = True
         if event.button.id == "btn-send":
             self.dismiss(self._input.value.strip())
         else:

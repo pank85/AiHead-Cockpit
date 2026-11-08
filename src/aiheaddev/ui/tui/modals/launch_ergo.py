@@ -6,6 +6,7 @@ from typing import Optional, Tuple, Union
 
 from pydantic import BaseModel
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.events import Resize
 from textual.screen import ModalScreen
@@ -37,6 +38,10 @@ class LaunchErgoModal(ModalScreen[Optional[ErgoLaunchParams]]):
     Consumes reusable SquadEditor for topology and role editing.
     Cancellation discards the deep copy and does not write app state.
     """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel", priority=False, show=False),
+    ]
 
     DEFAULT_CSS = """
     LaunchErgoModal {
@@ -252,6 +257,7 @@ class LaunchErgoModal(ModalScreen[Optional[ErgoLaunchParams]]):
         self.project_path = initial_project_folder(project_path)
         self.config_error = config_error
         self._submitting = False
+        self._dismissed = False
         ts = datetime.now().strftime("%Y%m%d-%H%M")
         self.default_label = f"ergo-{ts}"
 
@@ -445,6 +451,12 @@ class LaunchErgoModal(ModalScreen[Optional[ErgoLaunchParams]]):
         event.stop()
         self._sync_project_folder()
 
+    def action_cancel(self) -> None:
+        if getattr(self, "_dismissed", False):
+            return
+        self._dismissed = True
+        self.dismiss(None)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn_id = event.button.id
 
@@ -465,7 +477,7 @@ class LaunchErgoModal(ModalScreen[Optional[ErgoLaunchParams]]):
             self._set_status(f"[bold green]Saved default: {path}[/bold green]")
 
         elif btn_id == "btn-start-ergo":
-            if self._submitting:
+            if self._submitting or getattr(self, "_dismissed", False):
                 return
             self._sync_project_folder()
             error = self.squad_editor.validate()
@@ -473,6 +485,7 @@ class LaunchErgoModal(ModalScreen[Optional[ErgoLaunchParams]]):
                 self._set_status(f"[red]Validation Error: {error}[/red]")
                 return
             self._submitting = True
+            self._dismissed = True
             aihead_val = str(self._aihead_select.value)
             ai_head_override = True if aihead_val == "enable" else (False if aihead_val == "disable" else None)
             self.dismiss(
@@ -487,7 +500,7 @@ class LaunchErgoModal(ModalScreen[Optional[ErgoLaunchParams]]):
             )
 
         elif btn_id == "btn-cancel":
-            self.dismiss(None)
+            self.action_cancel()
 
 
 ErgoSettingsModal = LaunchErgoModal

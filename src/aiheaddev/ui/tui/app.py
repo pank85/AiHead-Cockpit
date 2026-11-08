@@ -119,6 +119,8 @@ class HerdrMasterApp(App):
     ) -> None:
         super().__init__(**kwargs)
         self._ai_head_ensure_pending = False
+        self._ai_head_focus_requested = False
+        self._ai_head_confirmed_target: Optional[WorkspaceTarget] = None
         self._session_argument = session
         self.session_name = self._requested_session()
         self.socket_path: Optional[Path] = None
@@ -178,6 +180,19 @@ class HerdrMasterApp(App):
             return None
         return (str(target.socket_path), target.workspace_id, target.pane_id)
 
+    def _publish_live_frame(self, frame: PaneFrame) -> None:
+        """Publish accepted or state-guard frame to deck and matching mounted AiHeadScreens."""
+        self._last_live_frame = frame
+        self._deck.update_live_frame(frame)
+        frame_key = self._live_key(frame.target)
+        for screen in self.screen_stack:
+            if isinstance(screen, AiHeadScreen):
+                if (
+                    self._ai_head_confirmed_target is not None
+                    and frame_key == self._live_key(self._ai_head_confirmed_target)
+                ):
+                    screen.update_live_frame(frame)
+
     def _on_live_pane_frame(self, frame: PaneFrame) -> None:
         if self._live_closed:
             return
@@ -204,10 +219,7 @@ class HerdrMasterApp(App):
             or self._live_key(frame.target) != self._live_key(self._live_desired_target)
         ):
             return
-        self._last_live_frame = frame
-        self._deck.update_live_frame(frame)
-        if isinstance(self.screen, AiHeadScreen):
-            self.screen.update_live_frame(frame)
+        self._publish_live_frame(frame)
 
     def _cancel_live_submit(self) -> None:
         task = self._live_submit_task
@@ -232,16 +244,15 @@ class HerdrMasterApp(App):
             self._cancel_live_submit()
             self._live_inventory_blocked = True
             unavailable = replace(
-                frame, lease=None, phase="stale", error=str(exc), can_reply=False
+                frame, lease=None, phase="stale", error=str(exc), can_reply=False, reply_eligible=False
             )
-            self._last_live_frame = unavailable
-            self._deck.update_live_frame(unavailable)
+            self._publish_live_frame(unavailable)
             return
         if not resolved.is_agent or resolved.interactive_ready is False:
             self._cancel_live_submit()
             self._live_inventory_blocked = True
-            self._last_live_frame = replace(frame, can_reply=False)
-            self._deck.update_live_frame(self._last_live_frame)
+            not_ready = replace(frame, can_reply=False, reply_eligible=False)
+            self._publish_live_frame(not_ready)
 
     async def _run_live_update(
         self, revision: int, target: Optional[WorkspaceTarget], *, select: bool
@@ -332,6 +343,8 @@ class HerdrMasterApp(App):
         cfg = getattr(self.app_state, "config", None)
         if not cfg or (not cfg.ai_head.enabled and not force):
             return
+        if focus:
+            self._ai_head_focus_requested = True
         if self._ai_head_ensure_pending:
             return
         self._ai_head_ensure_pending = True
@@ -369,28 +382,65 @@ class HerdrMasterApp(App):
                 self.app_state.ai_head_busy = bool(head_info.get("busy", False))
                 self._schedule_inventory_refresh()
                 logger.info(f"AiHead tab successfully ensured: {head_info}")
-                if focus and head_info and head_info.get("pane_id"):
-                    target = WorkspaceTarget(
-                        session_name=self.session_name or "default",
-                        socket_path=Path(getattr(self.client, "socket_path", "")),
-                        workspace_id=head_info.get("workspace_id") or target_ws,
-                        tab_id=head_info.get("tab_id"),
-                        pane_id=head_info.get("pane_id"),
-                    )
-                    self.on_workspace_browser_selection_changed(
-                        WorkspaceBrowser.SelectionChanged(target)
-                    )
-                if force:
-                    self.notify("AiHead tab ready.", severity="information")
+                should_focus = focus or getattr(self, "_ai_head_focus_requested", False)
+                if should_focus:
+                    if head_info and head_info.get("pane_id"):
+                        target = WorkspaceTarget(
+                            session_name=self.session_name or "default",
+                            socket_path=Path(getattr(self.client, "socket_path", "")),
+                            workspace_id=head_info.get("workspace_id") or target_ws,
+                            tab_id=head_info.get("tab_id"),
+                            pane_id=head_info.get("pane_id"),
+                        )
+                        self._ai_head_confirmed_target = target
+                        self.on_workspace_browser_selection_changed(
+                            WorkspaceBrowser.SelectionChanged(target)
+                        )
+                        for scr in self.screen_stack:
+                            if isinstance(scr, AiHeadScreen):
+                                scr.update_status(head_info.get("status", "ready"))
+                        self.notify("AiHead tab ready.", severity="information")
+                    else:
+                        self._ai_head_confirmed_target = None
+                        err_frame = PaneFrame(
+                            lease=None,
+                            target=None,
+                            phase="unavailable",
+                            agent_status="error",
+                            text_ansi="",
+                            error="AiHead initialization incomplete: missing pane. Use Back [Esc] to return and retry.",
+                            can_reply=False,
+                            reply_eligible=False,
+                        )
+                        for scr in self.screen_stack:
+                            if isinstance(scr, AiHeadScreen):
+                                scr.update_status("error")
+                                scr.update_live_frame(err_frame)
             except Exception as exc:
                 logger.exception(f"Failed to initialize AiHead tab: {exc}")
                 info = self.app_state.ai_head_info
                 if info is not None:
                     info["status"] = "pending"
                     info["reconciled"] = False
+                self._ai_head_confirmed_target = None
+                err_frame = PaneFrame(
+                    lease=None,
+                    target=None,
+                    phase="unavailable",
+                    agent_status="error",
+                    text_ansi="",
+                    error=f"AiHead initialization failed: {exc}. Use Back [Esc] to return and retry.",
+                    can_reply=False,
+                    reply_eligible=False,
+                )
+                for scr in self.screen_stack:
+                    if isinstance(scr, AiHeadScreen):
+                        scr.update_status("error")
+                        scr.update_live_frame(err_frame)
                 self.notify(f"Could not initialize AiHead tab: {exc}", severity="warning")
             finally:
                 self._ai_head_ensure_pending = False
+                self._ai_head_focus_requested = False
 
         self.run_worker(_run_ensure(), name="ensure_ai_head")
 
@@ -531,9 +581,9 @@ class HerdrMasterApp(App):
                 text_ansi="",
                 error=None,
                 can_reply=False,
+                reply_eligible=False if self._live_key(target) else None,
             )
-            self._last_live_frame = frame
-            self._deck.update_live_frame(frame)
+            self._publish_live_frame(frame)
         self._live_desired_target = target
         if self._live_controller is not None:
             self.run_worker(
@@ -626,6 +676,7 @@ class HerdrMasterApp(App):
                 return
         except Exception:
             pass
+        self.notify("No target selected. Opening Orchestration launcher.", severity="information")
         self.action_new_orchestration()
 
     def on_workspace_browser_open_requested(
@@ -1111,7 +1162,7 @@ class HerdrMasterApp(App):
 
     def action_open_settings(self) -> None:
         """Open the Settings modal."""
-        if len(self.screen_stack) > 1 or isinstance(
+        if (len(self.screen_stack) > 1 and not isinstance(self.screen, AiHeadScreen)) or isinstance(
             self.focused, (TextArea, Input, LivePaneOutput)
         ):
             return
@@ -1304,7 +1355,6 @@ class HerdrMasterApp(App):
 
     def action_launch_aihead(self) -> None:
         """Launch, ensure, and switch to the dedicated full-page AiHead screen."""
-        self._ensure_ai_head_if_enabled(force=True, focus=True)
         if not isinstance(self.screen, AiHeadScreen):
             cfg = getattr(self.app_state, "config", None)
             model = cfg.ai_head.binding.model if cfg and cfg.ai_head else "gpt-6.1-sol"
@@ -1318,20 +1368,44 @@ class HerdrMasterApp(App):
                 if cfg and cfg.ai_head and cfg.ai_head.cwd
                 else str(self.project_path or Path.home())
             )
+
+            can_reuse = (
+                self._ai_head_confirmed_target is not None
+                and self._last_live_frame is not None
+                and self._live_key(self._last_live_frame.target) == self._live_key(self._ai_head_confirmed_target)
+            )
+
             status_val = (
                 self.app_state.ai_head_info.get("status", "ready")
-                if self.app_state.ai_head_info
-                else "ready"
+                if (can_reuse and self.app_state.ai_head_info)
+                else "pending"
             )
+
             screen = AiHeadScreen(
                 model=model,
                 harness=harness,
                 cwd=cwd,
                 status=status_val,
             )
-            if self._last_live_frame is not None:
+
+            if can_reuse and self._last_live_frame is not None:
                 screen.update_live_frame(self._last_live_frame)
+            else:
+                pending_frame = PaneFrame(
+                    lease=None,
+                    target=None,
+                    phase="loading",
+                    agent_status="pending",
+                    text_ansi="",
+                    error=None,
+                    can_reply=False,
+                    reply_eligible=False,
+                )
+                screen.update_live_frame(pending_frame)
+
             self.push_screen(screen)
+
+        self._ensure_ai_head_if_enabled(force=True, focus=True)
 
     def action_view_logs(self) -> None:
         """Open diagnostic log viewer modal."""
@@ -1370,6 +1444,26 @@ class HerdrMasterApp(App):
     def action_open_config(self) -> None:
         """Route config action directly to Settings modal."""
         self.action_open_settings()
+
+    def on_live_pane_view_focus_return_requested(
+        self, event: LivePaneView.FocusReturnRequested
+    ) -> None:
+        event.stop()
+        self._focus_cockpit_tree()
+
+    def _focus_cockpit_tree(self) -> None:
+        def _do_focus() -> None:
+            try:
+                browser = self.query_one("WorkspaceBrowser")
+                try:
+                    browser.query_one("#workspace-tree").focus()
+                except Exception:
+                    browser.focus()
+            except Exception:
+                pass
+
+        _do_focus()
+        self.call_after_refresh(_do_focus)
 
     def on_target_selected(self, message: TargetSelected) -> None:
         """Update selected target across tree and deck."""

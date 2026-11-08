@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -17,6 +18,7 @@ from textual.widgets import (
     Static,
     TabbedContent,
     TabPane,
+    Tabs,
     TextArea,
 )
 
@@ -83,6 +85,19 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         height: 1;
         color: #38BDF8;
         text-style: bold;
+    }
+    #settings-destination {
+        height: 2;
+        min-height: 2;
+        max-height: 2;
+        border: none;
+        padding: 0;
+        background: #111827;
+        color: #94A3B8;
+    }
+    #settings-destination:focus {
+        border: none;
+        background: #1E293B;
     }
     SettingsModal TabbedContent {
         height: 1fr;
@@ -286,9 +301,31 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         # Local state for Tab 5 (AiHead)
         self._aihead_config = self.config.ai_head.model_copy(deep=True)
 
+    def _compute_scope(self) -> str:
+        resolved_proj = (self.project_path or Path.cwd()).resolve()
+        if resolved_proj.is_file():
+            resolved_proj = resolved_proj.parent
+        config_parent = self.project_config_path.parent.resolve()
+        if not self.project_config_path.exists():
+            return "new-local"
+        if config_parent == resolved_proj:
+            return "local"
+        return "inherited"
+
+    def _format_destination_text(self) -> str:
+        scope = self._compute_scope()
+        return f"Scope: {scope}\nDestination: {self.project_config_path}"
+
     def compose(self) -> ComposeResult:
         with Vertical(classes="settings-shell"):
             yield Label("⚙ Herdr-Master Settings", classes="settings-title")
+            yield TextArea(
+                self._format_destination_text(),
+                read_only=True,
+                show_line_numbers=False,
+                soft_wrap=False,
+                id="settings-destination",
+            )
             with TabbedContent():
                 # Tab 1: Projects & Folder Defaults
                 with TabPane("Projects & Folders", id="tab-projects"):
@@ -491,9 +528,16 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         self._setup_favorites_table()
         self._setup_council_table()
         self._refresh_council_warning()
+        try:
+            self.query_one(Tabs).focus()
+        except Exception:
+            pass
 
-    def _set_status(self, text: str) -> None:
-        self.query_one("#settings-status", Static).update(text)
+    def _set_status(self, text: Union[str, Text]) -> None:
+        if isinstance(text, str):
+            self.query_one("#settings-status", Static).update(Text(text))
+        else:
+            self.query_one("#settings-status", Static).update(text)
 
     # --------------------------------------------------------------------------
     # Tab 1: Favorites logic
@@ -874,6 +918,14 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         self.config.ai_head = new_aihead
 
         self.config = squad_to_project_config(new_squad, existing_config=self.config)
-        save_project_config(self.config, path=self.project_config_path)
+        try:
+            save_project_config(self.config, path=self.project_config_path)
+        except OSError as exc:
+            self._set_status(
+                Text(
+                    f"Save failed: {exc}. Retry with Save or press Cancel. Destination: {self.project_config_path}"
+                )
+            )
+            return
 
         self.dismiss((self.config, new_squad))

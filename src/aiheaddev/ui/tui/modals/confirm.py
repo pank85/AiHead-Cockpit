@@ -1,6 +1,7 @@
 """Confirmation modal dialog for destructive or landing operations."""
 
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Static
@@ -9,6 +10,10 @@ from textual.widgets import Button, Static
 class ConfirmModal(ModalScreen[bool]):
     """Modal dialog prompting the operator for confirmation."""
 
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel", priority=False, show=False),
+    ]
+
     DEFAULT_CSS = """
     ConfirmModal {
         align: center middle;
@@ -16,6 +21,7 @@ class ConfirmModal(ModalScreen[bool]):
     }
     .confirm-dialog {
         width: 60;
+        max-width: 95%;
         height: auto;
         background: #161E2E;
         border: thick #38BDF8;
@@ -57,6 +63,7 @@ class ConfirmModal(ModalScreen[bool]):
         super().__init__(**kwargs)
         self.title_text = title
         self.message_text = message
+        self._dismissed = False
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="confirm-dialog"):
@@ -66,7 +73,16 @@ class ConfirmModal(ModalScreen[bool]):
                 yield Button("Confirm", id="btn-confirm", variant="primary")
                 yield Button("Cancel", id="btn-cancel", variant="default")
 
+    def action_cancel(self) -> None:
+        if self._dismissed:
+            return
+        self._dismissed = True
+        self.dismiss(False)
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        if self._dismissed:
+            return
+        self._dismissed = True
         if event.button.id == "btn-confirm":
             self.dismiss(True)
         else:

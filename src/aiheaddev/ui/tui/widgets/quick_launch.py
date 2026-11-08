@@ -170,7 +170,7 @@ class QuickLaunchBar(Static):
                     "Orchestrate",
                     id="btn-new-orchestration",
                     variant="success",
-                    tooltip="[o] Run Scout -> Architect -> Coders -> Reviewer with subagents in a single harness.",
+                    tooltip="[o] Open selected target, otherwise run Orchestration (Scout -> Architect -> Coders -> Reviewer).",
                 )
                 yield Static("Single-harness subagents", classes="launch-description")
             with Vertical(classes="launch-action"):

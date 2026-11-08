@@ -365,14 +365,12 @@ class HerdrMasterApp(App):
                         session_name=self.session_name or "default",
                         socket_path=Path(getattr(self.client, "socket_path", "")),
                         workspace_id=head_info.get("workspace_id") or target_ws,
-                        pane_id=head_info.get("pane_id"),
                         tab_id=head_info.get("tab_id"),
-                        agent_name="ai-head",
-                        is_agent=True,
-                        agent_status="ready",
-                        title="AiHead",
+                        pane_id=head_info.get("pane_id"),
                     )
-                    self.post_message(TargetSelected(target))
+                    self.on_workspace_browser_selection_changed(
+                        WorkspaceBrowser.SelectionChanged(target)
+                    )
                 if force:
                     self.notify("AiHead tab ready.", severity="information")
             except Exception as exc:

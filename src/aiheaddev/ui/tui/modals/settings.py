@@ -124,6 +124,9 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         padding-top: 1;
         color: #94A3B8;
     }
+    #aihead-effort-label {
+        width: 18;
+    }
     .field-row Input {
         width: 1fr;
     }
@@ -506,6 +509,25 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
                                 value=self._aihead_config.binding.model,
                                 id="aihead-model",
                             )
+                        with Horizontal(classes="field-row"):
+                            yield Label("Effort / thinking", id="aihead-effort-label")
+                            yield Select(
+                                COUNCIL_EFFORT_OPTIONS,
+                                value=(
+                                    self._aihead_config.binding.effort.value
+                                    if self._aihead_config.binding and self._aihead_config.binding.effort
+                                    else "none"
+                                ),
+                                allow_blank=False,
+                                id="aihead-effort",
+                            )
+                        yield Checkbox(
+                            "Dangerously skip permissions",
+                            value=getattr(
+                                self._aihead_config, "dangerously_skip_permissions", True
+                            ),
+                            id="aihead-dangerously-skip-permissions",
+                        )
                         yield Label(
                             "Working Folder / Directory:", classes="section-label"
                         )
@@ -883,6 +905,15 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         aihead_harness = str(self.query_one("#aihead-harness", Select).value)
         aihead_model = self.query_one("#aihead-model", Input).value.strip()
         aihead_cwd = self.query_one("#aihead-cwd-input", Input).value.strip() or None
+        aihead_effort_raw = str(self.query_one("#aihead-effort", Select).value)
+        aihead_effort = (
+            EffortLevel(aihead_effort_raw)
+            if aihead_effort_raw in {e.value for e in EffortLevel}
+            else None
+        )
+        aihead_skip_permissions = self.query_one(
+            "#aihead-dangerously-skip-permissions", Checkbox
+        ).value
 
         if aihead_enabled:
             if not aihead_model:
@@ -895,16 +926,27 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
                 return
 
         try:
-            new_aihead = AiHeadConfig(
-                enabled=aihead_enabled,
-                soul=aihead_soul or DEFAULT_AI_HEAD_SOUL,
-                binding=HarnessBinding(
+            new_aihead = self._aihead_config.model_copy(deep=True)
+            new_aihead.enabled = aihead_enabled
+            new_aihead.soul = aihead_soul or DEFAULT_AI_HEAD_SOUL
+            new_aihead.cwd = aihead_cwd
+            setattr(new_aihead, "dangerously_skip_permissions", aihead_skip_permissions)
+
+            if new_aihead.binding is not None:
+                new_binding = new_aihead.binding.model_copy(deep=True)
+                new_binding.kind = HarnessKind(aihead_harness)
+                new_binding.model = aihead_model or "pro"
+                new_binding.effort = aihead_effort
+            else:
+                new_binding = HarnessBinding(
                     kind=HarnessKind(aihead_harness),
                     model=aihead_model or "pro",
+                    effort=aihead_effort,
                     label="ai-head",
-                ),
-                cwd=aihead_cwd,
-            )
+                )
+            new_aihead.binding = new_binding
+
+            new_aihead = type(new_aihead).model_validate(new_aihead.model_dump())
         except Exception as exc:
             self._set_status(f"AiHead validation error: {exc}")
             tabbed.active = "tab-aihead"

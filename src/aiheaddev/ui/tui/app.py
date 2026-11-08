@@ -331,7 +331,7 @@ class HerdrMasterApp(App):
                     except Exception:
                         pass
                 if not target_ws:
-                    return
+                    target_ws = "default"
                 origin_cwd = (
                     str(Path(os.path.expanduser(cfg.ai_head.cwd)).resolve())
                     if (cfg and cfg.ai_head and cfg.ai_head.cwd)

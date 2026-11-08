@@ -332,7 +332,11 @@ class HerdrMasterApp(App):
                         pass
                 if not target_ws:
                     return
-                origin_cwd = str((self.project_path or Path.cwd()).resolve())
+                origin_cwd = (
+                    str(Path(os.path.expanduser(cfg.ai_head.cwd)).resolve())
+                    if (cfg and cfg.ai_head and cfg.ai_head.cwd)
+                    else str((self.project_path or Path.cwd()).resolve())
+                )
                 head_info = await ensure_herdr_ai_head(
                     client=self.client,
                     workspace_id=target_ws,

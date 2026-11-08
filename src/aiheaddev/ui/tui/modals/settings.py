@@ -469,6 +469,16 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
                                 value=self._aihead_config.binding.model,
                                 id="aihead-model",
                             )
+                        yield Label(
+                            "Working Folder / Directory:", classes="section-label"
+                        )
+                        with Horizontal(classes="field-row"):
+                            yield Input(
+                                value=self._aihead_config.cwd or "",
+                                placeholder="Folder path or leave blank for repo root",
+                                id="aihead-cwd-input",
+                            )
+                            yield Button("Browse…", id="btn-browse-aihead-cwd")
 
             yield Static("", id="settings-status", classes="status-bar")
             with Horizontal(classes="footer-row"):
@@ -558,6 +568,10 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
 
         if btn_id == "btn-browse-favorite-path":
             self._browse_folder(self.query_one("#favorite-path-input", Input))
+            return
+
+        if btn_id == "btn-browse-aihead-cwd":
+            self._browse_folder(self.query_one("#aihead-cwd-input", Input))
             return
 
         if btn_id == "btn-add-favorite":
@@ -824,6 +838,7 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         aihead_soul = self.query_one("#aihead-soul-input", TextArea).text.strip()
         aihead_harness = str(self.query_one("#aihead-harness", Select).value)
         aihead_model = self.query_one("#aihead-model", Input).value.strip()
+        aihead_cwd = self.query_one("#aihead-cwd-input", Input).value.strip() or None
 
         if aihead_enabled:
             if not aihead_model:
@@ -844,6 +859,7 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
                     model=aihead_model or "pro",
                     label="ai-head",
                 ),
+                cwd=aihead_cwd,
             )
         except Exception as exc:
             self._set_status(f"AiHead validation error: {exc}")

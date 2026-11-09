@@ -90,6 +90,12 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         align: center middle;
         background: rgba(11, 15, 25, 0.85);
     }
+    SettingsModal Button {
+        height: 1;
+        min-height: 1;
+        border: none;
+        padding: 0 1;
+    }
     .settings-shell {
         width: 96%;
         height: 100%;
@@ -98,6 +104,7 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         border: thick #38BDF8;
         padding: 0 1;
         color: #F8FAFC;
+        overflow-y: hidden;
     }
     .settings-title {
         height: 1;
@@ -124,7 +131,7 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         height: 1fr;
     }
     SettingsModal ContentTabs {
-        height: 3;
+        height: 2;
         dock: top;
         background: #111827;
         border-bottom: solid #334155;
@@ -132,15 +139,14 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         margin-bottom: 0;
     }
     SettingsModal Tab {
-        height: 2;
+        height: 1;
+        min-height: 1;
+        border: none;
         min-width: 14;
         padding: 0 1;
         color: #94A3B8;
         text-style: bold;
         background: #161E2E;
-        border-top: solid #1E293B;
-        border-left: solid #1E293B;
-        border-right: solid #1E293B;
         margin-right: 1;
     }
     SettingsModal Tab:hover {
@@ -151,9 +157,7 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         background: #0284C7;
         color: #FFFFFF;
         text-style: bold;
-        border-top: solid #38BDF8;
-        border-left: solid #38BDF8;
-        border-right: solid #38BDF8;
+        border: none;
     }
     SettingsModal Underline {
         height: 1;
@@ -164,17 +168,17 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
     }
     .settings-tab-scroll {
         height: 1fr;
-        padding: 1 0;
+        padding: 0;
     }
     .section-label {
         color: #94A3B8;
         text-style: bold;
-        margin-top: 1;
+        margin-top: 0;
         height: 1;
     }
     .field-row {
         height: 3;
-        margin-bottom: 1;
+        margin-bottom: 0;
     }
     .field-row Label {
         width: 14;
@@ -201,13 +205,14 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
     }
     .table-container {
         height: 7;
-        margin-bottom: 1;
+        margin-bottom: 0;
         background: #111827;
         border: solid #334155;
     }
     .action-row {
-        height: 3;
-        margin-bottom: 1;
+        height: 1;
+        margin-top: 0;
+        margin-bottom: 0;
     }
     .action-row Button {
         margin-right: 1;
@@ -221,22 +226,38 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
     .warning-text {
         color: #F59E0B;
         text-style: bold;
-        height: 2;
+        height: 1;
     }
     .status-bar {
         height: 1;
+        max-height: 1;
+        margin: 0;
+        padding: 0;
         color: #F59E0B;
     }
     .footer-row {
         height: 1;
+        min-height: 1;
         max-height: 1;
-        margin-top: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
     }
     .footer-row Button {
+        height: 1;
+        min-height: 1;
+        max-height: 1;
+        border: none;
+        padding: 0 1;
         margin-right: 2;
         min-width: 14;
     }
     #btn-save {
+        height: 1;
+        min-height: 1;
+        max-height: 1;
+        border: none;
+        padding: 0 1;
         background: #0284C7;
         color: #F8FAFC;
         text-style: bold;
@@ -245,6 +266,11 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         background: #0369A1;
     }
     #btn-cancel {
+        height: 1;
+        min-height: 1;
+        max-height: 1;
+        border: none;
+        padding: 0 1;
         background: #334155;
         color: #F8FAFC;
     }
@@ -306,7 +332,7 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
     }
     #aihead-soul-input {
         height: 6;
-        margin-bottom: 1;
+        margin-bottom: 0;
         background: #1E293B;
         border: solid #334155;
         color: #F8FAFC;
@@ -397,7 +423,11 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
                                 placeholder="/path/to/default/workspace",
                                 id="default-folder-input",
                             )
-                            yield Button("Browse…", id="btn-browse-default-folder")
+                            yield Button(
+                                "Browse…",
+                                id="btn-browse-default-folder",
+                                compact=True,
+                            )
 
                         yield Label(
                             "Favorite Projects / Workspaces:", classes="section-label"
@@ -418,19 +448,34 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
                                 placeholder="Absolute or ~/ path",
                                 id="favorite-path-input",
                             )
-                            yield Button("Browse…", id="btn-browse-favorite-path")
+                            yield Button(
+                                "Browse…",
+                                id="btn-browse-favorite-path",
+                                compact=True,
+                            )
 
                         with Horizontal(classes="action-row"):
                             yield Button(
-                                "Add Favorite", id="btn-add-favorite", variant="success"
+                                "Add Favorite",
+                                id="btn-add-favorite",
+                                variant="success",
+                                compact=True,
                             )
                             yield Button(
-                                "Update", id="btn-edit-favorite", variant="warning"
+                                "Update",
+                                id="btn-edit-favorite",
+                                variant="warning",
+                                compact=True,
                             )
                             yield Button(
-                                "Remove", id="btn-remove-favorite", variant="error"
+                                "Remove",
+                                id="btn-remove-favorite",
+                                variant="error",
+                                compact=True,
                             )
-                            yield Button("Test Path", id="btn-test-favorite")
+                            yield Button(
+                                "Test Path", id="btn-test-favorite", compact=True
+                            )
 
                         yield Static("", id="favorite-test-status")
 
@@ -594,7 +639,9 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
                                 placeholder="Folder path or leave blank for repo root",
                                 id="aihead-cwd-input",
                             )
-                            yield Button("Browse…", id="btn-browse-aihead-cwd")
+                            yield Button(
+                                "Browse…", id="btn-browse-aihead-cwd", compact=True
+                            )
 
             yield Static("", id="settings-status", classes="status-bar")
             with Horizontal(classes="footer-row"):

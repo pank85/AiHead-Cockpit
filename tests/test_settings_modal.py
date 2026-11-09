@@ -269,6 +269,19 @@ async def test_council_tab_is_compact_and_add_member_visible_at_80x24(tmp_path):
             assert scroll.region.contains_region(region), bid
         assert scroll.scroll_offset.y == 0
 
+        # Save Settings and Cancel buttons are compact 1-row and contained within screen
+        save_btn = modal.query_one("#btn-save", Button)
+        cancel_btn = modal.query_one("#btn-cancel", Button)
+        assert save_btn.region.height == 1
+        assert cancel_btn.region.height == 1
+        assert screen_region.contains_region(save_btn.region)
+        assert screen_region.contains_region(cancel_btn.region)
+
+        # Modal shell fits within screen without vertical overflow
+        shell = modal.query_one(".settings-shell")
+        assert screen_region.contains_region(shell.region)
+        assert shell.region.bottom <= screen_region.height
+
         table = modal.query_one("#council-members-table", DataTable)
         assert table.region.height <= 7
 

@@ -31,13 +31,41 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Run TUI in demo mode with pre-populated data",
     )
+    parser.add_argument(
+        "--install-skills",
+        dest="install_skills",
+        action="store_true",
+        default=False,
+        help="Install/link Herdr-Master and AiHead standalone skills across AI harnesses (agy, pi, claude, opencode)",
+    )
     return parser
+
+
+def install_skills_entrypoint() -> int:
+    """Install and link Herdr-Master and AiHead standalone skills across AI harnesses."""
+    try:
+        from herdr_master.cli.skills import install_skills
+
+        install_skills(force=True)
+        return 0
+    except ImportError:
+        console.print(
+            "[red]Error: 'herdr-master' is not installed or available in this environment.[/red]\n"
+            "Please install it using: [cyan]pip install herdr-master[/cyan] or run [cyan]./install.sh[/cyan]"
+        )
+        return 1
 
 
 def main(argv: Optional[list[str]] = None) -> None:
     """Run the aiheaddev CLI entry point."""
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.install_skills:
+        code = install_skills_entrypoint()
+        if code != 0:
+            sys.exit(code)
+        return
 
     tui_app = HerdrMasterApp(session=args.session, demo=args.demo)
     result = tui_app.run()

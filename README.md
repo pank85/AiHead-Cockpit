@@ -14,7 +14,19 @@ AiHeadDev provides an interactive terminal cockpit for developers and autonomous
 
 ---
 
-## 🚀 Installation
+## 🚀 Installation & Quick Start
+
+### 1-Step Quick Install (Recommended)
+
+Run the automated install script to configure the virtual environment, install dependencies, and automatically link all required **Herdr-Master & AiHead standalone skills** across your AI agent harnesses (`agy`, `pi`, `claude`, `opencode`):
+
+```bash
+git clone https://github.com/pank85/AiHeadDev.git
+cd AiHeadDev
+./install.sh
+```
+
+### Manual Installation
 
 ```bash
 # Using uv (recommended)
@@ -22,6 +34,9 @@ uv pip install aiheaddev
 
 # Or with pip
 pip install aiheaddev
+
+# Configure the Herdr-Master & AiHead standalone skills across harnesses
+aiheaddev --install-skills
 ```
 
 ### Development Setup
@@ -29,7 +44,7 @@ pip install aiheaddev
 ```bash
 git clone https://github.com/pank85/AiHeadDev.git
 cd AiHeadDev
-uv sync --all-extras
+./install.sh
 ```
 
 ---

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -65,6 +66,23 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancel"),
+        Binding("1", "switch_tab('tab-projects')", "[1] Projects", show=False),
+        Binding("2", "switch_tab('tab-ergo')", "[2] Ergo", show=False),
+        Binding("3", "switch_tab('tab-orchestration')", "[3] Orchestration", show=False),
+        Binding("4", "switch_tab('tab-council')", "[4] Council", show=False),
+        Binding("5", "switch_tab('tab-aihead')", "[5] AiHead", show=False),
+        Binding("alt+1", "switch_tab('tab-projects')", "[1] Projects", show=False),
+        Binding("alt+2", "switch_tab('tab-ergo')", "[2] Ergo", show=False),
+        Binding("alt+3", "switch_tab('tab-orchestration')", "[3] Orchestration", show=False),
+        Binding("alt+4", "switch_tab('tab-council')", "[4] Council", show=False),
+        Binding("alt+5", "switch_tab('tab-aihead')", "[5] AiHead", show=False),
+        Binding("f1", "switch_tab('tab-projects')", "[1] Projects", show=False),
+        Binding("f2", "switch_tab('tab-ergo')", "[2] Ergo", show=False),
+        Binding("f3", "switch_tab('tab-orchestration')", "[3] Orchestration", show=False),
+        Binding("f4", "switch_tab('tab-council')", "[4] Council", show=False),
+        Binding("f5", "switch_tab('tab-aihead')", "[5] AiHead", show=False),
+        Binding("ctrl+tab", "next_tab", "Next Tab", show=False),
+        Binding("ctrl+shift+tab", "previous_tab", "Prev Tab", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -104,6 +122,45 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
     }
     SettingsModal TabbedContent > ContentSwitcher {
         height: 1fr;
+    }
+    SettingsModal ContentTabs {
+        height: 3;
+        dock: top;
+        background: #111827;
+        border-bottom: solid #334155;
+        padding: 0;
+        margin-bottom: 0;
+    }
+    SettingsModal Tab {
+        height: 2;
+        min-width: 14;
+        padding: 0 1;
+        color: #94A3B8;
+        text-style: bold;
+        background: #161E2E;
+        border-top: solid #1E293B;
+        border-left: solid #1E293B;
+        border-right: solid #1E293B;
+        margin-right: 1;
+    }
+    SettingsModal Tab:hover {
+        background: #1E293B;
+        color: #38BDF8;
+    }
+    SettingsModal Tab.-active {
+        background: #0284C7;
+        color: #FFFFFF;
+        text-style: bold;
+        border-top: solid #38BDF8;
+        border-left: solid #38BDF8;
+        border-right: solid #38BDF8;
+    }
+    SettingsModal Underline {
+        height: 1;
+        & > .underline--bar {
+            color: #38BDF8;
+            background: #334155;
+        }
     }
     .settings-tab-scroll {
         height: 1fr;
@@ -331,7 +388,7 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
             )
             with TabbedContent():
                 # Tab 1: Projects & Folder Defaults
-                with TabPane("Projects & Folders", id="tab-projects"):
+                with TabPane("1. Projects & Folders", id="tab-projects"):
                     with VerticalScroll(classes="settings-tab-scroll"):
                         yield Label("Default Folder:", classes="section-label")
                         with Horizontal(classes="field-row"):
@@ -378,15 +435,15 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
                         yield Static("", id="favorite-test-status")
 
                 # Tab 2: Ergo Squad
-                with TabPane("Ergo Squad", id="tab-ergo"):
+                with TabPane("2. Ergo Squad", id="tab-ergo"):
                     yield self.squad_editor
 
                 # Tab 3: Orchestration Squad
-                with TabPane("Orchestration Squad", id="tab-orchestration"):
+                with TabPane("3. Orchestration", id="tab-orchestration"):
                     yield self.orchestration_editor
 
                 # Tab 4: AI Council Settings
-                with TabPane("AI Council", id="tab-council"):
+                with TabPane("4. AI Council", id="tab-council"):
                     with VerticalScroll(classes="settings-tab-scroll compact-tab"):
                         for role, binding in (
                             ("coordinator", self._council_config.coordinator),
@@ -482,7 +539,7 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
                             yield Button("Down", id="btn-member-down", compact=True)
 
                 # Tab 5: AiHead Persona Settings
-                with TabPane("AiHead Persona", id="tab-aihead"):
+                with TabPane("5. AiHead Persona", id="tab-aihead"):
                     with VerticalScroll(classes="settings-tab-scroll"):
                         yield Checkbox(
                             "Enable AiHead Autonomous Decision-Maker",
@@ -555,6 +612,12 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
         except Exception:
             pass
 
+    def on_descendant_focus(self, event: events.DescendantFocus) -> None:
+        try:
+            event.widget.scroll_visible(animate=False)
+        except Exception:
+            pass
+
     def _set_status(self, text: Union[str, Text]) -> None:
         if isinstance(text, str):
             self.query_one("#settings-status", Static).update(Text(text))
@@ -621,6 +684,37 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
     # --------------------------------------------------------------------------
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+    def action_switch_tab(self, tab_id: str) -> None:
+        try:
+            tabbed = self.query_one(TabbedContent)
+            tabbed.active = tab_id
+        except Exception:
+            pass
+
+    def action_next_tab(self) -> None:
+        try:
+            tabbed = self.query_one(TabbedContent)
+            tabs = [pane.id for pane in tabbed.query(TabPane)]
+            if not tabs:
+                return
+            current = tabbed.active
+            idx = tabs.index(current) if current in tabs else 0
+            tabbed.active = tabs[(idx + 1) % len(tabs)]
+        except Exception:
+            pass
+
+    def action_previous_tab(self) -> None:
+        try:
+            tabbed = self.query_one(TabbedContent)
+            tabs = [pane.id for pane in tabbed.query(TabPane)]
+            if not tabs:
+                return
+            current = tabbed.active
+            idx = tabs.index(current) if current in tabs else 0
+            tabbed.active = tabs[(idx - 1) % len(tabs)]
+        except Exception:
+            pass
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn_id = event.button.id

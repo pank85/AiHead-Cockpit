@@ -29,6 +29,16 @@ from herdr_master.core.config import (
 from herdr_master.core.models import EffortLevel, HarnessKind, Squad
 from herdr_master.pipeline.squad import resolve_squad
 from aiheaddev.ui.tui.modals.settings import SettingsModal
+from aiheaddev.ui.tui.state import effort_select_options, harness_select_options
+
+
+def test_hermes_interactive_catalog_options():
+    assert ("Hermes (hermes)", "hermes") in harness_select_options()
+    assert "hermes" not in dict(harness_select_options(mode="native")).values()
+    assert effort_select_options("hermes", "openai-codex/gpt-6.1-terra") == [
+        ("Unset", "none"), ("Low", "low"), ("Medium", "medium"),
+        ("High", "high"), ("Max", "max"),
+    ]
 
 
 class SettingsHostApp(App[Optional[Tuple[HerdrMasterConfig, Squad]]]):
@@ -178,7 +188,14 @@ async def test_settings_modal_council_validation(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_settings_modal_aihead_editing_and_save(tmp_path):
+@pytest.mark.parametrize(
+    "harness,model",
+    [
+        ("claude", "claude-sonnet-4-6"),
+        ("hermes", "openai-codex/gpt-6.1-terra"),
+    ],
+)
+async def test_settings_modal_aihead_editing_and_save(tmp_path, harness, model):
     project_dir = tmp_path / "test_project"
     project_dir.mkdir()
     app = SettingsHostApp(project_path=project_dir)
@@ -194,8 +211,8 @@ async def test_settings_modal_aihead_editing_and_save(tmp_path):
         # Enable AiHead
         modal.query_one("#aihead-enabled", Checkbox).value = True
         modal.query_one("#aihead-soul-input", TextArea).text = "Custom UX Architect Soul"
-        modal.query_one("#aihead-harness", Select).value = "claude"
-        modal.query_one("#aihead-model", Input).value = "claude-sonnet-4-6"
+        modal.query_one("#aihead-harness", Select).value = harness
+        modal.query_one("#aihead-model", Input).value = model
         modal.query_one("#aihead-effort", Select).value = "high"
         modal.query_one("#aihead-dangerously-skip-permissions", Checkbox).value = False
 
@@ -215,8 +232,8 @@ async def test_settings_modal_aihead_editing_and_save(tmp_path):
         assert saved_cfg.projects.default_folder == str(project_dir)
         assert saved_cfg.ai_head.enabled is True
         assert saved_cfg.ai_head.soul == "Custom UX Architect Soul"
-        assert saved_cfg.ai_head.binding.kind.value == "claude"
-        assert saved_cfg.ai_head.binding.model == "claude-sonnet-4-6"
+        assert saved_cfg.ai_head.binding.kind.value == harness
+        assert saved_cfg.ai_head.binding.model == model
         assert saved_cfg.ai_head.binding.effort == EffortLevel.HIGH
         assert saved_cfg.ai_head.dangerously_skip_permissions is False
 
@@ -224,6 +241,8 @@ async def test_settings_modal_aihead_editing_and_save(tmp_path):
         persisted = load_project_config(modal.project_config_path)
         assert persisted.ai_head.enabled is True
         assert persisted.ai_head.soul == "Custom UX Architect Soul"
+        assert persisted.ai_head.binding.kind.value == harness
+        assert persisted.ai_head.binding.model == model
         assert persisted.ai_head.binding.effort == EffortLevel.HIGH
         assert persisted.ai_head.dangerously_skip_permissions is False
 

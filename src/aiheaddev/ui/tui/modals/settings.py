@@ -609,6 +609,10 @@ class SettingsModal(ModalScreen[Optional[Tuple[HerdrMasterConfig, Squad]]]):
                             yield Label("Model:")
                             yield Input(
                                 value=self._aihead_config.binding.model,
+                                tooltip=(
+                                    "Exact model or provider/model. Hermes example: "
+                                    "openai-codex/gpt-6.1-terra"
+                                ),
                                 id="aihead-model",
                             )
                         with Horizontal(classes="field-row"):

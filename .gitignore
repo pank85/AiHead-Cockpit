@@ -30,6 +30,7 @@ env.bak/
 venv.bak/
 
 .pytest_cache/
+.test-runtime/
 .coverage
 htmlcov/
 .ruff_cache/

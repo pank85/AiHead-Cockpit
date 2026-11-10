@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# AiHeadDev & Herdr-Master Skills Installer
+# AiHead-Cockpit & AiHead-Orchestrator Skills Installer
 # ==============================================================================
-# Sets up the virtual environment for AiHeadDev, installs dependencies,
-# and configures the essential Herdr-Master standalone skills across AI harnesses.
+# Sets up the virtual environment for AiHead-Cockpit, installs dependencies,
+# and configures the essential Herdr-Master / AiHead standalone skills across AI harnesses.
 # ==============================================================================
 set -euo pipefail
 
@@ -19,7 +19,7 @@ RED="\033[31m"
 DIM="\033[2m"
 RESET="\033[0m"
 
-echo -e "${BOLD}${CYAN}🧠 AiHeadDev Installer & Skills Setup${RESET}"
+echo -e "${BOLD}${CYAN}🧠 AiHead-Cockpit Installer & Skills Setup${RESET}"
 echo -e "${DIM}Repository: ${REPO_ROOT}${RESET}\n"
 
 # ------------------------------------------------------------------------------
@@ -58,32 +58,37 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 3. Install herdr-master & aiheaddev dependencies
+# 3. Install AiHead-Orchestrator & AiHead-Cockpit dependencies
 # ------------------------------------------------------------------------------
 echo -e "\n${BOLD}Installing dependencies...${RESET}"
 
-# Check for sibling herdr-master repository
-SIBLING_HERDR_MASTER="${REPO_ROOT}/../herdr-master"
+# Check for sibling AiHead-Orchestrator or herdr-master repository
+SIBLING_ORCH=""
+if [ -d "${REPO_ROOT}/../AiHead-Orchestrator" ] && [ -f "${REPO_ROOT}/../AiHead-Orchestrator/pyproject.toml" ]; then
+    SIBLING_ORCH="${REPO_ROOT}/../AiHead-Orchestrator"
+elif [ -d "${REPO_ROOT}/../herdr-master" ] && [ -f "${REPO_ROOT}/../herdr-master/pyproject.toml" ]; then
+    SIBLING_ORCH="${REPO_ROOT}/../herdr-master"
+fi
 
 if [ "$HAS_UV" = true ]; then
     # Ensure pip tools exist in venv if needed
-    if [ -d "$SIBLING_HERDR_MASTER" ] && [ -f "$SIBLING_HERDR_MASTER/pyproject.toml" ]; then
-        echo -e "${GREEN}✓${RESET} Found local herdr-master checkout at ${DIM}${SIBLING_HERDR_MASTER}${RESET}"
-        uv pip install --python "$VENV_PYTHON" -e "$SIBLING_HERDR_MASTER"
+    if [ -n "$SIBLING_ORCH" ]; then
+        echo -e "${GREEN}✓${RESET} Found local AiHead-Orchestrator checkout at ${DIM}${SIBLING_ORCH}${RESET}"
+        uv pip install --python "$VENV_PYTHON" -e "$SIBLING_ORCH"
     else
-        echo -e "${YELLOW}!${RESET} Local herdr-master checkout not found; installing from GitHub..."
-        uv pip install --python "$VENV_PYTHON" "git+https://github.com/pank85/herdr-master.git" || true
+        echo -e "${YELLOW}!${RESET} Local AiHead-Orchestrator checkout not found; installing from GitHub..."
+        uv pip install --python "$VENV_PYTHON" "git+https://github.com/pank85/AiHead-Orchestrator.git" || true
     fi
 
     echo -e "Installing ${BOLD}aiheaddev${RESET} (editable)..."
     uv pip install --python "$VENV_PYTHON" -e "$REPO_ROOT"
 else
-    if [ -d "$SIBLING_HERDR_MASTER" ] && [ -f "$SIBLING_HERDR_MASTER/pyproject.toml" ]; then
-        echo -e "${GREEN}✓${RESET} Found local herdr-master checkout at ${DIM}${SIBLING_HERDR_MASTER}${RESET}"
-        "$VENV_DIR/bin/pip" install -e "$SIBLING_HERDR_MASTER"
+    if [ -n "$SIBLING_ORCH" ]; then
+        echo -e "${GREEN}✓${RESET} Found local AiHead-Orchestrator checkout at ${DIM}${SIBLING_ORCH}${RESET}"
+        "$VENV_DIR/bin/pip" install -e "$SIBLING_ORCH"
     else
-        echo -e "${YELLOW}!${RESET} Local herdr-master checkout not found; installing from GitHub..."
-        "$VENV_DIR/bin/pip" install "git+https://github.com/pank85/herdr-master.git" || true
+        echo -e "${YELLOW}!${RESET} Local AiHead-Orchestrator checkout not found; installing from GitHub..."
+        "$VENV_DIR/bin/pip" install "git+https://github.com/pank85/AiHead-Orchestrator.git" || true
     fi
 
     echo -e "Installing ${BOLD}aiheaddev${RESET} (editable)..."
@@ -101,17 +106,17 @@ if "$VENV_PYTHON" -c "import herdr_master" >/dev/null 2>&1; then
     "$VENV_PYTHON" -m herdr_master.cli.main skills install "$@"
 else
     echo -e "${RED}Warning: 'herdr_master' module could not be loaded; skipping skill linking.${RESET}" >&2
-    echo -e "Please ensure herdr-master is installed: pip install -e ../herdr-master" >&2
+    echo -e "Please ensure AiHead-Orchestrator is installed: pip install -e ../AiHead-Orchestrator" >&2
 fi
 
 # ------------------------------------------------------------------------------
 # 5. Summary & Next Steps
 # ------------------------------------------------------------------------------
 echo -e "\n${BOLD}${GREEN}==============================================================================${RESET}"
-echo -e "${BOLD}${GREEN}🎉 Setup Complete! AiHeadDev & Skills are ready.${RESET}"
+echo -e "${BOLD}${GREEN}🎉 Setup Complete! AiHead-Cockpit & Skills are ready.${RESET}"
 echo -e "${BOLD}${GREEN}==============================================================================${RESET}\n"
 
-echo -e "To launch the AiHeadDev Cockpit:"
+echo -e "To launch the AiHead-Cockpit:"
 echo -e "  ${BOLD}${CYAN}source .venv/bin/activate && aiheaddev${RESET}"
 echo -e "  or directly:"
 echo -e "  ${BOLD}${CYAN}${VENV_DIR}/bin/aiheaddev${RESET}\n"

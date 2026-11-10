@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "aiheaddev"
 version = "0.1.0"
-description = "Autonomous AI-driven orchestration cockpit and terminal user interface for Herdr-Master"
+description = "Autonomous AI-driven orchestration cockpit and terminal user interface for AiHead-Orchestrator"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -14,6 +14,8 @@ authors = [
 ]
 keywords = [
     "aiheaddev",
+    "aihead-cockpit",
+    "aihead-orchestrator",
     "herdr",
     "herdr-master",
     "cockpit",
@@ -22,6 +24,10 @@ keywords = [
     "agent-orchestration",
     "textual"
 ]
+
+[project.urls]
+Homepage = "https://github.com/pank85/AiHead-Cockpit"
+Repository = "https://github.com/pank85/AiHead-Cockpit"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",

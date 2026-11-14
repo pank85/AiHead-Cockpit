@@ -1,6 +1,6 @@
 # 🧠 AiHead-Cockpit (`aiheaddev`)
 
-**AiHead-Cockpit** is an autonomous AI-driven orchestration cockpit and terminal user interface (TUI) built on [Textual](https://github.com/Textualize/textual) and powered by [AiHead-Orchestrator](https://github.com/pank85/AiHead-Orchestrator).
+**AiHead-Cockpit** is an autonomous AI-driven orchestration cockpit with a native Rust terminal interface, powered by [AiHead-Orchestrator](https://github.com/pank85/AiHead-Orchestrator).
 
 ---
 
@@ -15,6 +15,8 @@ AiHead-Cockpit provides an interactive terminal cockpit for developers and auton
 ---
 
 ## 🚀 Installation & Quick Start
+
+Platform wheels bundle the native executable and do not require Rust at runtime. Source, sdist and editable installs require Cargo and Rust 1.85.1 or newer, plus a working native build toolchain. If the bundled executable is missing or damaged, reinstall the wheel or rebuild the source installation; there is no Textual fallback.
 
 ### 1-Step Quick Install (Recommended)
 
@@ -72,7 +74,9 @@ aiheaddev --demo
 
 AiHead-Cockpit acts as the user interface layer that consumes `AiHead-Orchestrator` (`herdr-master`):
 * **`AiHead-Orchestrator`** (`herdr-master`) provides core execution runtime, catalog resolution, launcher protocols, and skills (`/ergo`, `/orchestration`, `/council`, `/herdr-master`).
-* **`AiHead-Cockpit`** provides the interactive dashboard, terminal widgets, modals, live streaming output, and visual cockpit.
+* **`AiHead-Cockpit`** uses a Rust terminal frontend with a Python bridge for orchestration, settings and existing configuration locations. Both `aihead` and `aiheaddev` use the same entrypoint; `--session`, `--demo` and `--install-skills` remain available, and skill installation does not start the native UI.
+
+The cockpit cannot reliably detect Herdr permission-dialog readiness. Use **Open in Herdr** to interact with permission prompts directly; do not assume an automated reply was accepted. If the bridge or terminal fails, exit and restart the cockpit; existing workspaces and configuration are not removed.
 
 ---
 

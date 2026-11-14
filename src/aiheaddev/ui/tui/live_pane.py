@@ -40,7 +40,7 @@ from herdr_master.herdr.protocol import parse_pane_read, parse_prompt_result
 from herdr_master.herdr.snapshot import TabSnapshot
 from herdr_master.herdr.socket import HerdrConnectionError, HerdrRPCError
 from herdr_master.herdr.subscribe import HerdrSubscription
-from aiheaddev.ui.tui.widgets.workspaces import WorkspaceTarget
+from aiheaddev.core.workspace_targets import WorkspaceTarget
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,7 @@ def resolve_live_pane(
     inventories: Sequence[SessionInventory],
     *,
     require_agent: bool = False,
+    strict_tab_identity: bool = False,
 ) -> ResolvedPane:
     """Resolve and verify exact socket/workspace/pane against fresh session inventories.
 
@@ -215,6 +216,8 @@ def resolve_live_pane(
 
     # Determine effective tab
     effective_tab_id = raw_pane.tab_id or (raw_agent.tab_id if raw_agent else None)
+    if strict_tab_identity and target.tab_id is not None and target.tab_id != effective_tab_id:
+        raise LiveTargetError("Pane tab identity changed")
     owning_tab: Optional[TabSnapshot] = None
     if effective_tab_id is not None:
         matching_tabs = [t for t in snapshot.tabs if t.tab_id == effective_tab_id]
@@ -290,7 +293,9 @@ class LivePaneController:
         rpc_timeout: float = 2.0,
         send_timeout: float = 10.0,
         reconnect_backoff: float = 1.0,
+        strict_tab_identity: bool = False,
     ) -> None:
+        self._strict_tab_identity = strict_tab_identity
         self._publish_callback = publish
         self._client_factory = client_factory
         self._subscription_factory = subscription_factory
@@ -478,7 +483,7 @@ class LivePaneController:
             socket_path=Path(target.socket_path),
             snapshot=snapshot,
         )
-        resolved = resolve_live_pane(target, [inventory])
+        resolved = resolve_live_pane(target, [inventory], strict_tab_identity=self._strict_tab_identity)
         if resolved.target.tab_id is None:
             raise LiveTargetError("Verified pane tab identity is missing")
         known_terminal = (
@@ -614,7 +619,7 @@ class LivePaneController:
             self._last_text_ansi = ""
 
         try:
-            resolved = resolve_live_pane(target, inventories)
+            resolved = resolve_live_pane(target, inventories, strict_tab_identity=self._strict_tab_identity)
         except LiveTargetError as exc:
             matching_inv = next(
                 (inv for inv in inventories if Path(inv.socket_path) == Path(target.socket_path)),
@@ -1098,12 +1103,14 @@ class LivePaneController:
                 session_name=session_name,
                 socket_path=Path(socket_str),
                 workspace_id=ws_id,
+                tab_id=self._active_target.tab_id if self._strict_tab_identity and self._active_target else None,
                 pane_id=pane_id,
             )
 
             try:
                 resolved = resolve_live_pane(
-                    preflight_target, [temp_inventory], require_agent=True
+                    preflight_target, [temp_inventory], require_agent=True,
+                    strict_tab_identity=self._strict_tab_identity,
                 )
             except LiveTargetError as exc:
                 self._invalidate_lease(
@@ -1231,6 +1238,58 @@ class LivePaneController:
         if not self._closed and self._dirty_event is not None:
             self._last_refresh_attempt = 0.0
             self._dirty_event.set()
+
+    async def submit_terminal_input(self, request: TerminalInput) -> ReplyResult:
+        """Bridge-safe direct input: fresh exact-identity preflight and one dispatch.
+
+        The historical Textual method below retains its bool API. This method reports
+        an uncertain outcome whenever the single RPC may have left the process.
+        """
+        lease = request.lease
+        if self._send_in_flight:
+            return ReplyResult(lease, "rejected", "Another pane input is in progress")
+        if (self._closed or not self._enabled or not self._lease_is_current(lease)
+                or self._current_phase not in ("live", "degraded")
+                or self._active_target is None or not lease.terminal_id
+                or bool(request.text is not None) == bool(request.keys is not None)):
+            return ReplyResult(lease, "rejected", "Terminal lease or input is invalid")
+        self._send_in_flight = True
+        target = self._active_target
+        revision = self._eligibility_revision
+        try:
+            try:
+                client = self._get_client(target.session_name, Path(target.socket_path))
+                snapshot = await asyncio.wait_for(client.get_snapshot(), timeout=self._rpc_timeout)
+                inventory = SessionInventory(session_name=target.session_name,
+                                             socket_path=Path(target.socket_path), snapshot=snapshot)
+                resolved = resolve_live_pane(target, [inventory], strict_tab_identity=True)
+                if resolved.terminal_id != lease.terminal_id:
+                    raise LiveTargetError("Terminal incarnation changed or is missing")
+            except Exception:
+                self._invalidate_lease(lease, phase="stale", error="Terminal preflight failed")
+                return ReplyResult(lease, "rejected", "Terminal preflight failed")
+            if (not self._lease_is_current(lease) or revision != self._eligibility_revision
+                    or self._active_target != target or not self._enabled
+                    or self._current_phase not in ("live", "degraded")):
+                return ReplyResult(lease, "rejected", "Target changed during preflight")
+            try:
+                result = await asyncio.wait_for(client.pane_send_input(
+                    pane_id=target.pane_id, text=request.text, keys=request.keys),
+                    timeout=self._send_timeout)
+            except HerdrRPCError:
+                return ReplyResult(lease, "rejected", "Herdr rejected terminal input")
+            except Exception:
+                return ReplyResult(lease, "uncertain", "Terminal input may have been dispatched; do not retry automatically")
+            if (not isinstance(result, dict) or not result
+                    or (result.get("pane_id") is not None and result["pane_id"] != target.pane_id)
+                    or (result.get("workspace_id") is not None and result["workspace_id"] != target.workspace_id)
+                    or (result.get("tab_id") is not None and result["tab_id"] != target.tab_id)):
+                return ReplyResult(lease, "uncertain", "Terminal input returned an invalid result; do not retry automatically")
+            self._nudge_dirty()
+            return ReplyResult(lease, "accepted", "Terminal input sent")
+        finally:
+            self._send_in_flight = False
+            self._publish_current_state()
 
     async def send_terminal_input(
         self,

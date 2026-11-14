@@ -4,14 +4,13 @@ import curses
 import subprocess
 import sys
 
-
 OPTIONS = (
     ("AiHead", ("herdr-master", "head")),
-    ("New Master", ("herdr-master", "master", "start")),
-    ("New Ergo", ("herdr-master", "ergo")),
-    ("Orchestrate", ("herdr-master", "orchestration")),
-    ("AI Council", ("herdr-master", "council")),
-    ("Settings", ("herdm", "aihead-setup")),
+    ("New Master", ("aihead", "--herdr-master")),
+    ("New Ergo", ("aihead", "--ergo")),
+    ("Orchestrate", ("aihead", "--orchestration")),
+    ("AI Council", ("aihead", "--council")),
+    ("Settings", ("aihead", "--setup")),
 )
 
 

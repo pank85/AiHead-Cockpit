@@ -1,19 +1,26 @@
 # AiHead-Cockpit
 
-AiHead-Cockpit launches native [Herdr](https://herdr.dev/) and provides a small command-pane menu for [AiHead-Orchestrator](https://github.com/pank85/AiHead-Orchestrator). Install Herdr separately and ensure `herdr`, `herdr-master`, and `herdm` are on PATH. Install this Python package with `pip install aiheaddev`. Skill installation is separate and optional: `aihead --install-skills`.
+AiHead-Cockpit provides the `aihead` CLI wrapper around native [Herdr](https://herdr.dev/), the AiHead-Cockpit TUI (`aihead --tui`), and a command-pane menu for [AiHead-Orchestrator](https://github.com/pank85/AiHead-Orchestrator). Install Herdr separately and ensure `herdr`, `herdr-master`, and `herdm` are on PATH. Install this Python package with `pip install aiheaddev`. Skill installation is separate and optional: `aihead --install-skills`.
 
-## Start
+## Commands
 
-Run `aihead` (or `aiheaddev`) to launch or attach native Herdr; `aihead --session NAME` selects a Herdr session. The former Rust cockpit and its demo are not the product screen.
+- `aihead` (or `aihead --session NAME`): opens native Herdr (does not start the cockpit).
+- `aihead --tui`: starts the AiHead-Cockpit TUI.
+- `aihead --setup [--config /absolute/path/to/.herdr-master.toml]`: opens the interactive settings TUI. The settings screen covers `aihead`, `ergo`, `orchestration`, `council`, `herdr-master`, and the `worker-pool` (worker pool).
+- `aihead --herdr-master`: starts Herdr Master in a new Herdr workspace and switches to it when Herdr can switch, or starts it in a terminal when switching is unavailable.
+- `aihead --ergo <objective>`: starts Ergo in a new Herdr workspace and switches to it when Herdr can switch, or starts it in a terminal when switching is unavailable.
+- `aihead --orchestration <objective>`: starts Orchestration in a new Herdr workspace and switches to it when Herdr can switch, or starts it in a terminal when switching is unavailable.
+- `aihead --council <objective>`: starts Council in a new Herdr workspace and switches to it when Herdr can switch, or starts it in a terminal when switching is unavailable.
 
 ## Herdr workspace actions
 
 Link this checkout with `herdr plugin link /absolute/path/to/AiHead-Cockpit`. The
 workspace context menu then offers AiHead, New Master, New Ergo, Orchestrate,
-AI Council, and Settings. These actions open zoomed plugin panes; Ergo,
-Orchestrate, and Council use the existing menu's objective prompt before
-calling their respective `herdr-master` commands. The plugin requires Herdr
-0.9.5, Python 3, and the installed `herdr-master` and `herdm` commands on PATH.
+AI Council, and Settings. These actions open zoomed plugin panes; New Master runs
+`aihead --herdr-master`, Settings runs `aihead --setup`, and Ergo, Orchestrate,
+and Council use the menu's objective prompt before calling `aihead --ergo`,
+`aihead --orchestration`, and `aihead --council`. The plugin requires Herdr
+0.9.5, Python 3, and the installed `aihead` and `herdr-master` commands on PATH.
 Keep the linked checkout in place while using the plugin.
 
 ## Herdr menu binding
@@ -28,13 +35,13 @@ command = "aihead --menu"
 description = "AiHead menu"
 ```
 
-Run `herdr config check` and `herdr server reload-config` after editing. The command must be on the Herdr server's PATH. Use up/down to select an action, Enter to open it, or q to quit. The menu starts AiHead, New Master, New Ergo, Orchestrate, and AI Council using `herdr-master`; Ergo, Orchestrate, and Council ask for an objective. Settings runs `herdm aihead-setup`. The Orchestrator setup TUI owns squad and per-skill settings and the existing `.herdr-master.toml` config API; install an Orchestrator version that provides that TUI. Older versions may provide a different setup command instead. No separate settings store is used.
+Run `herdr config check` and `herdr server reload-config` after editing. The command must be on the Herdr server's PATH. Use up/down to select an action, Enter to open it, or q to quit. The menu starts AiHead (`herdr-master head`), New Master (`aihead --herdr-master`), New Ergo (`aihead --ergo`), Orchestrate (`aihead --orchestration`), AI Council (`aihead --council`), and Settings (`aihead --setup`); Ergo, Orchestrate, and Council ask for an objective. The Orchestrator settings TUI covers `aihead`, `ergo`, `orchestration`, `council`, `herdr-master`, and the worker pool and writes to `.herdr-master.toml`. No separate settings store is used.
 
 Herdr closes workspaces with its built-in `prefix+shift+d` and `confirm_close` behavior.
 
 ## Development
 
-Install project dependencies and run `pytest`. Source and wheels do not need to build the old Rust cockpit. No Textual interface is used.
+Install project dependencies and run `pytest`. Check Rust bridge changes with `cargo test` inside `rust/cockpit`.
 
 ## License
 

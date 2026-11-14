@@ -16,7 +16,7 @@ platforms = ["linux", "macos"]
 id = "master"
 title = "New Master"
 placement = "zoomed"
-command = ["herdr-master", "master", "start"]
+command = ["aihead", "--herdr-master"]
 platforms = ["linux", "macos"]
 
 [[panes]]
@@ -44,7 +44,7 @@ platforms = ["linux", "macos"]
 id = "settings"
 title = "Settings"
 placement = "zoomed"
-command = ["herdm", "aihead-setup"]
+command = ["aihead", "--setup"]
 platforms = ["linux", "macos"]
 
 [[actions]]

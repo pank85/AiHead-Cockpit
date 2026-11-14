@@ -1,22 +1,94 @@
-"""Tests for the Herdr launcher and command menu."""
+"""Tests for the Herdr launcher, unified aihead flags, and command menu."""
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
-from aiheaddev.cli import main
 from aiheaddev import menu
+from aiheaddev.cli import main
 
 
-def test_launch_herdr():
-    with patch("aiheaddev.cli.os.execvp") as execute:
+def test_launch_herdr_does_not_start_cockpit():
+    with (
+        patch("aiheaddev.cli.RustCockpit") as cockpit,
+        patch("aiheaddev.cli.os.execvp") as execute,
+    ):
         main([])
-        execute.assert_called_once_with("herdr", ["herdr"])
+    cockpit.assert_not_called()
+    execute.assert_called_once_with("herdr", ["herdr"])
 
 
 def test_launch_session():
-    with patch("aiheaddev.cli.os.execvp") as execute:
+    with (
+        patch("aiheaddev.cli.RustCockpit") as cockpit,
+        patch("aiheaddev.cli.os.execvp") as execute,
+    ):
         main(["--session", "work"])
-        execute.assert_called_once_with("herdr", ["herdr", "--session", "work"])
+    cockpit.assert_not_called()
+    execute.assert_called_once_with("herdr", ["herdr", "--session", "work"])
+
+
+def test_tui_starts_cockpit():
+    with patch("aiheaddev.cli.RustCockpit") as cockpit:
+        cockpit.return_value.run.return_value = None
+        main(["--tui", "--session", "work"])
+    cockpit.assert_called_once_with(session="work", demo=False)
+    cockpit.return_value.run.assert_called_once_with()
+
+
+def test_setup_accepts_absolute_config_and_invokes_settings_tui(tmp_path):
+    cfg = (tmp_path / ".herdr-master.toml").resolve()
+    calls = []
+    fake_module = SimpleNamespace(run_skill_setup=lambda *, config=None: calls.append(config))
+    with patch.dict("sys.modules", {"herdr_master.cli.aihead_setup": fake_module}):
+        main(["--setup", "--config", str(cfg)])
+    assert calls == [cfg]
+
+
+def test_setup_without_config_invokes_settings_tui():
+    calls = []
+    fake_module = SimpleNamespace(run_skill_setup=lambda *, config=None: calls.append(config))
+    with patch.dict("sys.modules", {"herdr_master.cli.aihead_setup": fake_module}):
+        main(["--setup"])
+    assert calls == [None]
+
+
+@pytest.mark.parametrize(
+    "argv,expected",
+    [
+        (["--herdr-master"], ("herdr-master", None, None)),
+        (["--ergo", "fix bug"], ("ergo", "fix bug", None)),
+        (["--orchestration", "ship feature"], ("orchestration", "ship feature", None)),
+        (["--council", "review arch"], ("council", "review arch", "work")),
+    ],
+)
+def test_skill_flags_launch_workspace_skill(argv, expected):
+    calls = []
+
+    def fake_launch_skill(skill, intent, session, cwd, config, harness, model, effort):
+        calls.append((skill, intent, session))
+
+    full_argv = argv + (["--session", "work"] if expected[2] else [])
+    fake_module = SimpleNamespace(_launch_skill=fake_launch_skill)
+    with patch.dict("sys.modules", {"herdr_master.cli.main": fake_module}):
+        main(full_argv)
+    assert calls == [expected]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--herdr-master", "--no-attach"],
+        ["--ergo", "task", "--no-attach"],
+        ["--tui", "--setup"],
+        ["--ergo", "task", "--council", "plan"],
+        ["--ergo", "   "],
+    ],
+)
+def test_invalid_or_disallowed_flags_fail(argv):
+    with pytest.raises(SystemExit) as exc:
+        main(argv)
+    assert exc.value.code != 0
 
 
 def test_menu_dispatch():
@@ -66,9 +138,9 @@ def test_keyboard_quit_and_wrap():
 
 
 @pytest.mark.parametrize("choice,arguments", [(0, ["herdr-master", "head"]),
-    (1, ["herdr-master", "master", "start"]), (2, ["herdr-master", "ergo", "objective"]),
-    (3, ["herdr-master", "orchestration", "objective"]),
-    (4, ["herdr-master", "council", "objective"]), (5, ["herdm", "aihead-setup"])])
+    (1, ["aihead", "--herdr-master"]), (2, ["aihead", "--ergo", "objective"]),
+    (3, ["aihead", "--orchestration", "objective"]),
+    (4, ["aihead", "--council", "objective"]), (5, ["aihead", "--setup"])])
 def test_menu_launchers(choice, arguments):
     with patch("aiheaddev.menu.curses.wrapper", return_value=choice), \
             patch("builtins.input", return_value="objective") as prompt, patch("subprocess.run") as run:

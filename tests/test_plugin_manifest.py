@@ -11,7 +11,6 @@ except ImportError:
 
 from aiheaddev import menu
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -20,11 +19,11 @@ def test_workspace_actions_and_panes():
         manifest = tomllib.load(file)
     expected = {
         "head": ("AiHead", ["herdr-master", "head"]),
-        "master": ("New Master", ["herdr-master", "master", "start"]),
+        "master": ("New Master", ["aihead", "--herdr-master"]),
         "ergo": ("New Ergo", ["python3", "src/aiheaddev/menu.py", "ergo"]),
         "orchestration": ("Orchestrate", ["python3", "src/aiheaddev/menu.py", "orchestration"]),
         "council": ("AI Council", ["python3", "src/aiheaddev/menu.py", "council"]),
-        "settings": ("Settings", ["herdm", "aihead-setup"]),
+        "settings": ("Settings", ["aihead", "--setup"]),
     }
     actions = {action["id"]: action for action in manifest["actions"]}
     panes = {pane["id"]: pane for pane in manifest["panes"]}
@@ -45,9 +44,9 @@ def test_workspace_actions_and_panes():
 
 
 @pytest.mark.parametrize("choice,command", [
-    (2, ["herdr-master", "ergo"]),
-    (3, ["herdr-master", "orchestration"]),
-    (4, ["herdr-master", "council"]),
+    (2, ["aihead", "--ergo"]),
+    (3, ["aihead", "--orchestration"]),
+    (4, ["aihead", "--council"]),
 ])
 def test_preselected_action_prompts_only_for_objective(choice, command):
     with patch("aiheaddev.menu.curses.wrapper") as wrapper, \

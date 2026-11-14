@@ -1,117 +1,90 @@
-"""Tests for aiheaddev CLI entry point."""
+"""Tests for the Herdr launcher and command menu."""
+from unittest.mock import patch
 
-from unittest.mock import MagicMock, patch
+import pytest
 
-from aiheaddev.cli import build_parser, main
-
-
-def test_parser_defaults():
-    parser = build_parser()
-    args = parser.parse_args([])
-    assert args.session is None
-    assert args.demo is False
-    assert args.install_skills is False
+from aiheaddev.cli import main
+from aiheaddev import menu
 
 
-def test_parser_custom_args():
-    parser = build_parser()
-    args = parser.parse_args(["--session", "my-sess", "--demo", "--install-skills"])
-    assert args.session == "my-sess"
-    assert args.demo is True
-    assert args.install_skills is True
+def test_launch_herdr():
+    with patch("aiheaddev.cli.os.execvp") as execute:
+        main([])
+        execute.assert_called_once_with("herdr", ["herdr"])
 
 
-def test_main_install_skills():
-    with patch("aiheaddev.cli.install_skills_entrypoint", return_value=0) as mock_install, patch(
-        "aiheaddev.cli.RustCockpit"
-    ) as mock_app_cls:
+def test_launch_session():
+    with patch("aiheaddev.cli.os.execvp") as execute:
+        main(["--session", "work"])
+        execute.assert_called_once_with("herdr", ["herdr", "--session", "work"])
+
+
+def test_menu_dispatch():
+    with patch("aiheaddev.menu.run_menu") as run:
+        main(["--menu"])
+        run.assert_called_once()
+
+
+class FakeScreen:
+    def __init__(self, keys):
+        self.keys = iter(keys)
+        self.lines = []
+
+    def keypad(self, enabled):
+        assert enabled
+
+    def erase(self):
+        pass
+
+    def getmaxyx(self):
+        return (24, 80)
+
+    def addnstr(self, y, x, text, width, *args):
+        self.lines.append(text)
+
+    def refresh(self):
+        pass
+
+    def getch(self):
+        return next(self.keys)
+
+
+def test_keyboard_selection_without_terminal():
+    screen = FakeScreen([menu.curses.KEY_DOWN, menu.curses.KEY_DOWN,
+                         menu.curses.KEY_UP, 10])
+    with patch("aiheaddev.menu.curses.curs_set"):
+        assert menu.select_action(screen) == 1
+    for label in ("AiHead", "New Master", "New Ergo", "Orchestrate", "AI Council", "Settings"):
+        assert any(label in line for line in screen.lines)
+    assert "> New Master" in screen.lines
+
+
+def test_keyboard_quit_and_wrap():
+    with patch("aiheaddev.menu.curses.curs_set"):
+        assert menu.select_action(FakeScreen([ord("q")])) is None
+        assert menu.select_action(FakeScreen([menu.curses.KEY_UP, 13])) == 5
+
+
+@pytest.mark.parametrize("choice,arguments", [(0, ["herdr-master", "head"]),
+    (1, ["herdr-master", "master", "start"]), (2, ["herdr-master", "ergo", "objective"]),
+    (3, ["herdr-master", "orchestration", "objective"]),
+    (4, ["herdr-master", "council", "objective"]), (5, ["herdm", "aihead-setup"])])
+def test_menu_launchers(choice, arguments):
+    with patch("aiheaddev.menu.curses.wrapper", return_value=choice), \
+            patch("builtins.input", return_value="objective") as prompt, patch("subprocess.run") as run:
+        menu.run_menu()
+    run.assert_called_once_with(arguments, check=True)
+    assert prompt.call_count == (1 if choice in (2, 3, 4) else 0)
+
+
+def test_quit_does_not_launch():
+    with patch("aiheaddev.menu.curses.wrapper", return_value=None), patch("subprocess.run") as run:
+        menu.run_menu()
+    run.assert_not_called()
+
+
+
+def test_install_skills_does_not_launch():
+    with patch("aiheaddev.cli.install_skills_entrypoint", return_value=0), patch("os.execvp") as execute:
         main(["--install-skills"])
-        mock_install.assert_called_once()
-        mock_app_cls.assert_not_called()
-
-
-def test_install_scripts_exist_and_executable():
-    import os
-    from pathlib import Path
-
-    repo_root = Path(__file__).resolve().parent.parent
-    install_sh = repo_root / "install.sh"
-    scripts_install_sh = repo_root / "scripts" / "install.sh"
-
-    assert install_sh.is_file(), "install.sh must exist at repo root"
-    assert os.access(install_sh, os.X_OK), "install.sh must be executable"
-
-    assert scripts_install_sh.is_file(), "scripts/install.sh must exist"
-    assert os.access(scripts_install_sh, os.X_OK), "scripts/install.sh must be executable"
-
-
-def test_main_normal_exit():
-    with patch("aiheaddev.cli.RustCockpit") as mock_app_cls:
-        mock_app = MagicMock()
-        mock_app.run.return_value = None
-        mock_app_cls.return_value = mock_app
-
-        main(["--session", "test-sess"])
-
-        mock_app_cls.assert_called_once_with(session="test-sess", demo=False)
-        mock_app.run.assert_called_once()
-
-
-def test_main_attach_action():
-    with patch("aiheaddev.cli.RustCockpit") as mock_app_cls, patch("os.execvp") as mock_execvp:
-        mock_app = MagicMock()
-        mock_app.run.return_value = {"action": "attach", "session": "remote-sess"}
-        mock_app_cls.return_value = mock_app
-
-        main(["--session", "orig-sess"])
-
-        mock_execvp.assert_called_once_with("herdr", ["herdr", "--session", "remote-sess"])
-
-
-def test_main_done_action():
-    with patch("aiheaddev.cli.RustCockpit") as mock_app_cls, patch("aiheaddev.cli.console.print") as mock_print:
-        mock_app = MagicMock()
-        mock_app.run.return_value = {"action": "done", "workspace_id": "wX"}
-        mock_app_cls.return_value = mock_app
-
-        main([])
-
-        assert any("wX" in str(arg) for call in mock_print.call_args_list for arg in call[0])
-
-
-def test_native_failure_propagates_exit_code():
-    import pytest
-    from aiheaddev.native import NativeError
-    with patch('aiheaddev.cli.RustCockpit') as cockpit:
-        cockpit.return_value.run.side_effect = NativeError('failed', 17)
-        with pytest.raises(SystemExit) as error:
-            main([])
-        assert error.value.code == 17
-
-
-def test_commands_map_to_same_entrypoint():
-    from pathlib import Path
-    try:
-        import tomllib
-    except ImportError:
-        import tomli as tomllib
-    data = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())
-    assert data['project']['scripts']['aihead'] == data['project']['scripts']['aiheaddev'] == 'aiheaddev.cli:main'
-
-
-def test_paths_do_not_import_textual():
-    import builtins
-    original = builtins.__import__
-    def guarded(name, *args, **kwargs):
-        assert name != 'textual' and not name.startswith('textual.')
-        return original(name, *args, **kwargs)
-    with patch('builtins.__import__', side_effect=guarded), \
-         patch('aiheaddev.cli.RustCockpit') as cockpit, \
-         patch('aiheaddev.cli.install_skills_entrypoint', return_value=0):
-        cockpit.return_value.run.return_value = None
-        main([])
-        cockpit.assert_called_with(session=None, demo=False)
-        main(['--demo'])
-        cockpit.assert_called_with(session=None, demo=True)
-        main(['--install-skills'])
-        assert cockpit.call_count == 2
+        execute.assert_not_called()

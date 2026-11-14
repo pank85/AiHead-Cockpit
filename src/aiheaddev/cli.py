@@ -7,8 +7,6 @@ from typing import Optional
 
 from rich.console import Console
 
-from aiheaddev.native import NativeError, RustCockpit
-
 console = Console()
 
 
@@ -16,7 +14,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser for aiheaddev."""
     parser = argparse.ArgumentParser(
         prog="aiheaddev",
-        description="Launch the AiHeadDev interactive terminal management cockpit.",
+        description="Open native Herdr or the AiHead command menu.",
     )
     parser.add_argument(
         "--session",
@@ -25,11 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Herdr session name to bind to (e.g. herdr-master)",
     )
     parser.add_argument(
-        "--demo",
-        dest="demo",
-        action="store_true",
-        default=False,
-        help="Run TUI in demo mode with pre-populated data",
+        "--menu", action="store_true", help="Open the AiHead menu in a Herdr command pane"
     )
     parser.add_argument(
         "--install-skills",
@@ -67,21 +61,21 @@ def main(argv: Optional[list[str]] = None) -> None:
             sys.exit(code)
         return
 
-    tui_app = RustCockpit(session=args.session, demo=args.demo)
+    if args.menu:
+        if args.session:
+            parser.error("--session cannot be combined with --menu")
+        from aiheaddev.menu import run_menu
+        run_menu()
+        return
+
+    command = ["herdr"]
+    if args.session:
+        command.extend(["--session", args.session])
     try:
-        result = tui_app.run()
-    except NativeError as exc:
-        console.print(f"[red]Error: {exc}[/red]")
-        sys.exit(exc.code)
-    if isinstance(result, dict) and result.get("action") == "attach":
-        target_session = result.get("session", args.session)
-        console.print(
-            f"[yellow]Attaching to isolated Herdr session '{target_session}'...[/yellow]"
-        )
-        os.execvp("herdr", ["herdr", "--session", str(target_session)])
-    elif isinstance(result, dict) and result.get("action") == "done":
-        ws_id = result.get("workspace_id")
-        console.print(f"[green]✓[/green] Active in workspace [cyan]{ws_id}[/cyan]")
+        os.execvp(command[0], command)
+    except OSError as exc:
+        console.print(f"[red]Cannot start Herdr: {exc}[/red]")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ from aiheaddev.ui.tui.live_pane import (
     bound_output,
     resolve_live_pane,
 )
-from aiheaddev.ui.tui.widgets.workspaces import WorkspaceTarget
+from aiheaddev.core.workspace_targets import WorkspaceTarget
 
 
 class FakeClient:

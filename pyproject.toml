@@ -21,8 +21,7 @@ keywords = [
     "cockpit",
     "tui",
     "terminal",
-    "agent-orchestration",
-    "textual"
+    "agent-orchestration"
 ]
 
 classifiers = [
@@ -43,7 +42,6 @@ classifiers = [
 
 dependencies = [
     "herdr-master>=0.1.0",
-    "textual>=8.0.0",
     "rich>=13.7.0",
     "pyte>=0.8.2",
     "pydantic>=2.6.0",

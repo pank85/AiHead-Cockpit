@@ -8,15 +8,12 @@ from pathlib import Path
 
 import pytest
 from protocol22_fixtures import agent_prompted
-from test_live_output import install_event_controller, make_two_agent_inventory, select_pane
 from test_live_pane import FakeClient, FakeSubscription, make_inventory
 
 from herdr_master.herdr.client import HerdrClient
 from herdr_master.herdr.discovery import SessionInventory
-from aiheaddev.ui.tui.app import HerdrMasterApp
 from aiheaddev.ui.tui.live_pane import LivePaneController, ReplyRequest
-from aiheaddev.ui.tui.widgets.live_output import LivePaneView
-from aiheaddev.ui.tui.widgets.workspaces import WorkspaceBrowser, WorkspaceTarget
+from aiheaddev.core.workspace_targets import WorkspaceTarget
 
 
 async def wait_until(predicate, timeout=2.0):
@@ -595,175 +592,6 @@ async def test_new_identity_survives_following_failed_read_and_blocks_unknown_re
         assert client.prompt_agent_calls == []
     finally:
         await controller.close()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("stage", ["preflight", "dispatch"])
-async def test_ui_watcher_revocation_interrupts_send_and_preserves_draft(stage):
-    """Finding 1: real app cancellation is rejected before dispatch, uncertain afterwards."""
-    app = HerdrMasterApp(demo=True)
-    inv = make_two_agent_inventory(Path("/tmp/review-ui-revoke.sock"))
-    clients, live, _ = install_event_controller(app, [inv])
-    client = clients[str(inv.socket_path)]
-    ready = live.setdefault((str(inv.socket_path), "p1"), asyncio.Event())
-    async with app.run_test(size=(80, 24)) as pilot:
-        await pilot.pause()
-        app.demo = False
-        browser = app.query_one(WorkspaceBrowser)
-        view = app.query_one(LivePaneView)
-        await select_pane(pilot, browser, 0, ready)
-        await pilot.click("#btn-reply")
-        view._reply_text.text = "retain original"
-        await pilot.pause()
-        if stage == "preflight":
-            client.snapshot_gate = asyncio.Event()
-            entered = client.preflight_entered
-        else:
-            client.dispatch_gate = asyncio.Event()
-            entered = client.dispatch_entered
-        await pilot.click("#btn-send-reply")
-        await asyncio.wait_for(entered.wait(), 2)
-
-        async def fail_read(*args, **kwargs):
-            raise OSError("live pane became stale")
-
-        client.read_pane = fail_read
-        app._live_controller._dirty_event.set()
-        await wait_until(lambda: view._draft_invalid and not view._send_in_flight)
-        assert view._reply_text.text == "retain original" and view._btn_send.disabled
-        expected = "Rejected" if stage == "preflight" else "Uncertain"
-        assert any(expected in call.args[0] for call in app.notify.call_args_list)
-        assert len(client.prompts) == (0 if stage == "preflight" else 1)
-
-
-@pytest.mark.asyncio
-async def test_ui_missing_known_terminal_id_blocks_preflight_before_reconcile():
-    """Finding 2: UI invalidation happens synchronously on missing identity evidence."""
-    app = HerdrMasterApp(demo=True)
-    inv = make_two_agent_inventory(Path("/tmp/review-ui-missing-id.sock"))
-    clients, live, _ = install_event_controller(app, [inv])
-    client = clients[str(inv.socket_path)]
-    ready = live.setdefault((str(inv.socket_path), "p1"), asyncio.Event())
-    async with app.run_test(size=(80, 24)) as pilot:
-        await pilot.pause()
-        app.demo = False
-        browser = app.query_one(WorkspaceBrowser)
-        view = app.query_one(LivePaneView)
-        await select_pane(pilot, browser, 0, ready)
-        await pilot.click("#btn-reply")
-        view._reply_text.text = "pinned"
-        await pilot.pause()
-        client.snapshot_gate = asyncio.Event()
-        await pilot.click("#btn-send-reply")
-        await asyncio.wait_for(client.preflight_entered.wait(), 2)
-        missing = inv.model_copy(deep=True)
-        missing.snapshot.panes[0].terminal_id = None
-        app.app_state.live_sessions = [missing]
-        app._guard_live_inventory()
-        assert view._draft_invalid and view._btn_send.disabled
-        await wait_until(lambda: not view._send_in_flight)
-        assert client.prompts == [] and view._reply_text.text == "pinned"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("other_target", ["socket", "workspace"])
-async def test_ui_offline_new_key_never_displays_previous_output(other_target):
-    """Finding 5: cached offline selection cannot relabel another key's output."""
-    app = HerdrMasterApp(demo=True)
-    first = make_two_agent_inventory(Path("/tmp/review-output-a.sock"), "session-a")
-    if other_target == "socket":
-        second = make_two_agent_inventory(Path("/tmp/review-output-b.sock"), "session-b")
-        second.error = "offline"  # Keep the cached snapshot and selectable pane nodes.
-        inventories = [first, second]
-    else:
-        snapshot = first.snapshot
-        snapshot_data = snapshot.model_dump()
-        snapshot_data["workspaces"].append({"workspace_id": "w2", "label": "Second"})
-        snapshot_data["tabs"].append({"tab_id": "t2", "workspace_id": "w2"})
-        snapshot_data["panes"].append(
-            {"pane_id": "p3", "workspace_id": "w2", "tab_id": "t2", "agent": "worker"}
-        )
-        snapshot_data["agents"].append(
-            {"pane_id": "p3", "workspace_id": "w2", "tab_id": "t2", "agent": "worker"}
-        )
-        first.snapshot = type(snapshot).model_validate(snapshot_data)
-        second = first
-        inventories = [first]
-    clients, live, _ = install_event_controller(app, inventories)
-    ready = live.setdefault((str(first.socket_path), "p1"), asyncio.Event())
-    async with app.run_test(size=(80, 24)) as pilot:
-        await pilot.pause()
-        app.demo = False
-        browser = app.query_one(WorkspaceBrowser)
-        view = app.query_one(LivePaneView)
-        await select_pane(pilot, browser, 0, ready)
-        assert str(first.socket_path) in view._output.text.plain
-        if other_target == "workspace":
-            offline = first.model_copy(deep=True)
-            offline.error = "offline"
-            app.app_state.live_sessions = [offline]
-            app._update_all_widgets()
-            await pilot.pause()
-            node = next(n for n in browser._tree.root.children if n.data.workspace_id == "w2")
-            expected_workspace, expected_pane = "w2", "p3"
-        else:
-            node = next(
-                n for n in browser._tree.root.children if n.data.socket_path == second.socket_path
-            )
-            expected_workspace, expected_pane = "w1", "p1"
-        node.expand()
-        browser._tree.select_node(node.children[0])
-        await wait_until(lambda: view._current_frame is not None
-                         and view._current_frame.phase == "stale"
-                         and view._current_frame.target.workspace_id == expected_workspace
-                         and view._current_frame.target.pane_id == expected_pane)
-        await pilot.pause()
-        assert view._current_frame.target.socket_path == second.socket_path
-        assert view._output.text.plain == ""
-        assert view._current_frame.agent_status == "unknown"
-        assert all(client.prompts == [] for client in clients.values())
-
-
-@pytest.mark.asyncio
-async def test_ui_malformed_real_rpc_response_is_uncertain_and_keeps_draft(tmp_path):
-    """Finding 6: a real {} response cannot erase operator text or trigger retry."""
-    socket_path = tmp_path / "ui.sock"
-    requests = []
-    received = asyncio.Event()
-
-    async def handle(reader, writer):
-        requests.append(json.loads(await reader.readline()))
-        writer.write(b"{}\n")
-        await writer.drain()
-        writer.close()
-        await writer.wait_closed()
-        received.set()
-
-    server = await asyncio.start_unix_server(handle, path=str(socket_path))
-    app = HerdrMasterApp(demo=True)
-    inventory = make_two_agent_inventory(socket_path)
-    clients, live, _ = install_event_controller(app, [inventory])
-    clients[str(socket_path)].prompt_agent = HerdrClient(socket_path=socket_path).prompt_agent
-    ready = live.setdefault((str(socket_path), "p1"), asyncio.Event())
-    try:
-        async with app.run_test(size=(80, 24)) as pilot:
-            await pilot.pause()
-            app.demo = False
-            browser = app.query_one(WorkspaceBrowser)
-            view = app.query_one(LivePaneView)
-            await select_pane(pilot, browser, 0, ready)
-            await pilot.click("#btn-reply")
-            view._reply_text.text = "must not disappear"
-            await pilot.pause()
-            await pilot.click("#btn-send-reply")
-            await asyncio.wait_for(received.wait(), 2)
-            await wait_until(lambda: not view._send_in_flight)
-            assert view._reply_text.text == "must not disappear"
-            assert any("Uncertain" in call.args[0] for call in app.notify.call_args_list)
-            assert len(requests) == 1 and requests[0]["method"] == "agent.prompt"
-    finally:
-        server.close()
-        await server.wait_closed()
 
 
 @pytest.mark.asyncio

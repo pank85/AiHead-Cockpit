@@ -2,6 +2,7 @@
 
 import curses
 import subprocess
+import sys
 
 
 OPTIONS = (
@@ -45,9 +46,11 @@ def select_action(screen):
             return selected
 
 
-def run_menu() -> None:
+def run_menu(choice=None) -> None:
+    """Run the menu, or prompt for the objective of a preselected action."""
     try:
-        choice = curses.wrapper(select_action)
+        if choice is None:
+            choice = curses.wrapper(select_action)
         if choice is None:
             return
         command = list(OPTIONS[choice][1])
@@ -61,3 +64,11 @@ def run_menu() -> None:
         print("\nCancelled.")
     except (OSError, curses.error, subprocess.CalledProcessError) as exc:
         print(f"Error: {exc}")
+
+
+if __name__ == "__main__":
+    # Plugin panes select the workflow first; reuse the menu's objective prompt.
+    choices = {"ergo": 2, "orchestration": 3, "council": 4}
+    if len(sys.argv) != 2 or sys.argv[1] not in choices:
+        raise SystemExit("Usage: menu.py {ergo|orchestration|council}")
+    run_menu(choices[sys.argv[1]])

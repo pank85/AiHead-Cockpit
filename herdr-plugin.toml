@@ -1,0 +1,90 @@
+id = "pank85.aihead-cockpit"
+name = "AiHead"
+version = "0.1.0"
+min_herdr_version = "0.9.5"
+description = "AiHead orchestration actions for Herdr workspaces"
+platforms = ["linux", "macos"]
+
+[[panes]]
+id = "head"
+title = "AiHead"
+placement = "zoomed"
+command = ["herdr-master", "head"]
+platforms = ["linux", "macos"]
+
+[[panes]]
+id = "master"
+title = "New Master"
+placement = "zoomed"
+command = ["herdr-master", "master", "start"]
+platforms = ["linux", "macos"]
+
+[[panes]]
+id = "ergo"
+title = "New Ergo"
+placement = "zoomed"
+command = ["python3", "src/aiheaddev/menu.py", "ergo"]
+platforms = ["linux", "macos"]
+
+[[panes]]
+id = "orchestration"
+title = "Orchestrate"
+placement = "zoomed"
+command = ["python3", "src/aiheaddev/menu.py", "orchestration"]
+platforms = ["linux", "macos"]
+
+[[panes]]
+id = "council"
+title = "AI Council"
+placement = "zoomed"
+command = ["python3", "src/aiheaddev/menu.py", "council"]
+platforms = ["linux", "macos"]
+
+[[panes]]
+id = "settings"
+title = "Settings"
+placement = "zoomed"
+command = ["herdm", "aihead-setup"]
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "head"
+title = "AiHead"
+contexts = ["workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "pank85.aihead-cockpit", "--entrypoint", "head", "--placement", "zoomed", "--focus"]
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "master"
+title = "New Master"
+contexts = ["workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "pank85.aihead-cockpit", "--entrypoint", "master", "--placement", "zoomed", "--focus"]
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "ergo"
+title = "New Ergo"
+contexts = ["workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "pank85.aihead-cockpit", "--entrypoint", "ergo", "--placement", "zoomed", "--focus"]
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "orchestration"
+title = "Orchestrate"
+contexts = ["workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "pank85.aihead-cockpit", "--entrypoint", "orchestration", "--placement", "zoomed", "--focus"]
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "council"
+title = "AI Council"
+contexts = ["workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "pank85.aihead-cockpit", "--entrypoint", "council", "--placement", "zoomed", "--focus"]
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "settings"
+title = "Settings"
+contexts = ["workspace"]
+command = ["herdr", "plugin", "pane", "open", "--plugin", "pank85.aihead-cockpit", "--entrypoint", "settings", "--placement", "zoomed", "--focus"]
+platforms = ["linux", "macos"]

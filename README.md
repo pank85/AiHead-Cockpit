@@ -6,6 +6,16 @@ AiHead-Cockpit launches native [Herdr](https://herdr.dev/) and provides a small 
 
 Run `aihead` (or `aiheaddev`) to launch or attach native Herdr; `aihead --session NAME` selects a Herdr session. The former Rust cockpit and its demo are not the product screen.
 
+## Herdr workspace actions
+
+Link this checkout with `herdr plugin link /absolute/path/to/AiHead-Cockpit`. The
+workspace context menu then offers AiHead, New Master, New Ergo, Orchestrate,
+AI Council, and Settings. These actions open zoomed plugin panes; Ergo,
+Orchestrate, and Council use the existing menu's objective prompt before
+calling their respective `herdr-master` commands. The plugin requires Herdr
+0.9.5, Python 3, and the installed `herdr-master` and `herdm` commands on PATH.
+Keep the linked checkout in place while using the plugin.
+
 ## Herdr menu binding
 
 Add the following to your Herdr `config.toml`, choosing an unused key if necessary. This project does not edit that file. Herdr 0.9.5 documents `type = "pane"` as a temporary zoomed pane that closes when the command exits.
@@ -20,7 +30,7 @@ description = "AiHead menu"
 
 Run `herdr config check` and `herdr server reload-config` after editing. The command must be on the Herdr server's PATH. Use up/down to select an action, Enter to open it, or q to quit. The menu starts AiHead, New Master, New Ergo, Orchestrate, and AI Council using `herdr-master`; Ergo, Orchestrate, and Council ask for an objective. Settings runs `herdm aihead-setup`. The Orchestrator setup TUI owns squad and per-skill settings and the existing `.herdr-master.toml` config API; install an Orchestrator version that provides that TUI. Older versions may provide a different setup command instead. No separate settings store is used.
 
-Herdr closes workspaces with its built-in `prefix+shift+d` and `confirm_close` behavior. This integration does not add a right-click menu item.
+Herdr closes workspaces with its built-in `prefix+shift+d` and `confirm_close` behavior.
 
 ## Development
 

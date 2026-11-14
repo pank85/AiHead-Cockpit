@@ -1,0 +1,21 @@
+{
+  "request": {"id": 7, "method": "initialize", "params": {"protocol": 1, "capabilities": [], "session": null, "demo": false}},
+  "response": {"id": 7, "result": {"protocol": 1, "capabilities": []}},
+  "error": {"id": 8, "error": {"code": "invalid_params", "message": "Invalid target", "field_errors": {"target": "Invalid target"}}},
+  "event": {"event": "inventory", "revision": 1, "payload": {"sessions": []}},
+  "events": [
+    {"event":"inventory","revision":2,"payload":{"sessions":[{"socket_path":"/tmp/herdr.sock","session":"default","connection":"connected","error":null,"workspaces":[{"workspace_id":"w1","label":"work","metadata":{},"agents":[],"tabs":[{"tab_id":"t1","label":"main","panes":[{"pane_id":"p1","terminal_id":"term1","label":"agent","state":"idle","role":"scout","readiness":{"can_reply":true,"explanation":"ready","state":"ready"},"metadata":{}}],"layout":{"state":"available","rects":[{"pane_id":"p1","x":0,"y":0,"width":80,"height":24}],"focused_pane_id":"p1"}}]}]}]}},
+    {"event":"pane_frame","revision":3,"payload":{"target":{"socket_path":"/tmp/herdr.sock","workspace_id":"w1","tab_id":"t1","pane_id":"p1","terminal_id":"term1"},"lease":{"target":{"socket_path":"/tmp/herdr.sock","workspace_id":"w1","tab_id":"t1","pane_id":"p1","terminal_id":"term1"},"generation":2,"terminal_id":"term1"},"text":"hello\n","readiness":{"can_reply":true,"explanation":"ready","state":"ready"},"layout":{"state":"layout_unavailable","rects":[]}}},
+    {"event":"reply_result","revision":4,"payload":{"request_id":9,"outcome":"uncertain","message":"disconnected"}},
+    {"event":"operation_status","revision":5,"payload":{"request_id":10,"outcome":"pending","message":"launching","phase":"dispatch","status":"running"}}
+  ],
+  "launch_requests": [
+    {"id":11,"method":"launch.master","params":{"project_path":"/project","session":null,"name":"master","harness":"pi","model":"provider/model","effort":null,"task":null,"ai_head":null}},
+    {"id":12,"method":"launch.ergo","params":{"project_path":"/project","session":null,"intent":"task","label":"","squad":null,"customize_first":false,"start_pipeline":true,"save_default":false,"ai_head":true}},
+    {"id":13,"method":"launch.orchestration","params":{"project_path":"/project","session":"named","intent":"task","label":"","harness":"pi","scout_model":"provider/a","architect_model":"provider/b","reviewer_model":"provider/c","worker_models":["provider/d"],"scout_effort":null,"architect_effort":null,"reviewer_effort":null,"dangerously_skip_permissions":false,"ai_head":false}},
+    {"id":14,"method":"launch.council","params":{"project_path":"/project","session":null,"idea":"idea","label":"","config":{},"customize_roster":false}}
+  ],
+  "target": {"socket_path": "/tmp/herdr.sock", "workspace_id": "w1", "tab_id": "t1", "pane_id": "p1", "terminal_id": "term1"},
+  "lease": {"target": {"socket_path": "/tmp/herdr.sock", "workspace_id": "w1", "tab_id": "t1", "pane_id": "p1", "terminal_id": "term1"}, "generation": 2, "terminal_id": "term1"},
+  "outcomes": [{"type": "quit"}, {"type": "attach", "session": "default", "workspace_id": "w1", "tab_id": "t1", "pane_id": "p1"}, {"type": "workspace", "session": "default", "workspace_id": "w1"}]
+}

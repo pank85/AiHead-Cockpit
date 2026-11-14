@@ -34,3 +34,5 @@ venv.bak/
 .coverage
 htmlcov/
 .ruff_cache/
+/src/aiheaddev/_native/
+/rust/cockpit/target/

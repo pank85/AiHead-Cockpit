@@ -291,7 +291,21 @@ def _install_audit_hook(guard: SandboxGuardContext) -> None:
                     f"Sandbox audit fence: process launch event '{event}' denied ({args[:1]})"
                 )
 
-            # 2. Sockets, external connections, DNS, send, bind
+            # 2. Permit only filesystem AF_UNIX bind/connect within this
+            # sandbox container. Everything else remains network-denied.
+            if event in ("socket.connect", "socket.bind"):
+                try:
+                    import socket
+                    sock, address = args
+                    if isinstance(sock, socket.socket) and sock.family == socket.AF_UNIX:
+                        name = os.fsdecode(os.fspath(address))
+                        if name and "\0" not in name:
+                            resolved = Path(name).resolve()
+                            if (resolved == guard.container_dir or resolved.is_relative_to(guard.container_dir)
+                                    or resolved == guard.work_dir or resolved.is_relative_to(guard.work_dir)):
+                                return
+                except (TypeError, ValueError, OSError, AttributeError):
+                    pass
             if event in (
                 "socket.connect",
                 "socket.bind",
@@ -586,11 +600,11 @@ def main() -> int:
     runtime_parent = resolve_runtime_parent(repo_root)
     if runtime_parent is not None:
         container_dir = Path(
-            tempfile.mkdtemp(prefix="aiheaddev_test_sandbox_", dir=str(runtime_parent))
+            tempfile.mkdtemp(prefix="s_", dir=str(runtime_parent))
         ).resolve()
     else:
         container_dir = Path(
-            tempfile.mkdtemp(prefix="aiheaddev_test_sandbox_")
+            tempfile.mkdtemp(prefix="s_")
         ).resolve()
 
     work_dir = (container_dir / "work").resolve()

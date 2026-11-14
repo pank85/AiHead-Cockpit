@@ -7,7 +7,7 @@ from typing import Optional
 
 from rich.console import Console
 
-from aiheaddev.ui.tui.app import HerdrMasterApp
+from aiheaddev.native import NativeError, RustCockpit
 
 console = Console()
 
@@ -67,8 +67,12 @@ def main(argv: Optional[list[str]] = None) -> None:
             sys.exit(code)
         return
 
-    tui_app = HerdrMasterApp(session=args.session, demo=args.demo)
-    result = tui_app.run()
+    tui_app = RustCockpit(session=args.session, demo=args.demo)
+    try:
+        result = tui_app.run()
+    except NativeError as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        sys.exit(exc.code)
     if isinstance(result, dict) and result.get("action") == "attach":
         target_session = result.get("session", args.session)
         console.print(

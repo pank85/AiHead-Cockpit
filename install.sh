@@ -22,6 +22,17 @@ RESET="\033[0m"
 echo -e "${BOLD}${CYAN}🧠 AiHead-Cockpit Installer & Skills Setup${RESET}"
 echo -e "${DIM}Repository: ${REPO_ROOT}${RESET}\n"
 
+# A source/editable install compiles the native cockpit before touching a venv or skills.
+if ! command -v cargo >/dev/null 2>&1 || ! command -v rustc >/dev/null 2>&1; then
+    echo "Error: Rust 1.85.1 or newer (cargo and rustc) is required for source installation." >&2
+    exit 1
+fi
+RUST_VERSION="$(rustc --version | awk '{print $2}')"
+if ! printf '%s\n' "$RUST_VERSION" | awk -F '[.-]' '{ exit !(($1+0 > 1) || ($1+0 == 1 && $2+0 > 85) || ($1+0 == 1 && $2+0 == 85 && $3+0 >= 1)) }'; then
+    echo "Error: Rust 1.85.1 or newer is required; found ${RUST_VERSION}." >&2
+    exit 1
+fi
+
 # ------------------------------------------------------------------------------
 # 1. Detect Python & Package Manager (uv preferred)
 # ------------------------------------------------------------------------------
